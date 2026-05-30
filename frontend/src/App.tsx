@@ -98,6 +98,15 @@ export default function App() {
           // We include it here solely for documentation in the Help Modal.
         },
       },
+      {
+        key: "p",
+        description: "Focus pay-per-use amount input",
+        action: () => {
+          // This shortcut is handled specifically in Dashboard.tsx
+          // where it has access to the subscription state and input ref.
+          // We include it here solely for documentation in the Help Modal.
+        },
+      },
     ],
   });
 
