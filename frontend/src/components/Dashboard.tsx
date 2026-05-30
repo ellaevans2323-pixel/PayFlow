@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { buildCancelTx, buildPayPerUseTx } from "../stellar";
 import { friendlyError } from "../utils/errors";
 import SubscriptionCard from "./SubscriptionCard";
@@ -35,13 +35,13 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce }:
   const [showIncreaseAllowance, setShowIncreaseAllowance] = useState(false);
   const [allowanceRefresh, setAllowanceRefresh] = useState(0);
   const [dailyLimitRefresh, setDailyLimitRefresh] = useState(0);
+  const ppuInputRef = useRef<HTMLInputElement>(null);
 
   usePolling({ callback: refresh, interval: 30000, enabled: !!sub?.active });
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key.toLowerCase() !== "x") return;
-
+      const key = e.key.toLowerCase();
       const target = e.target as HTMLElement;
       if (
         target.tagName === "INPUT" ||
@@ -51,9 +51,14 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce }:
         return;
       }
 
-      if (sub?.active && !showConfirm) {
+      if (key === "x" && sub?.active && !showConfirm) {
         e.preventDefault();
         setShowConfirm(true);
+      }
+
+      if (key === "p" && sub?.active) {
+        e.preventDefault();
+        ppuInputRef.current?.focus();
       }
     }
 
@@ -159,7 +164,7 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce }:
               </div>
 
               <SubscriptionHistory userKey={userKey} />
-              <PayPerUseForm onPay={handlePayPerUse} loading={ppuPending} />
+              <PayPerUseForm ref={ppuInputRef} onPay={handlePayPerUse} loading={ppuPending} />
               {ppuPending && (
                 <p className="status-text status-text--pending">Confirming payment…</p>
               )}
