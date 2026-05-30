@@ -14,6 +14,7 @@ import ToastContainer from "./Toast";
 import { useSubscription } from "../hooks/useSubscription";
 import { usePolling } from "../hooks/usePolling";
 import { useToast } from "../hooks/useToast";
+import { useRpcHealth } from "../hooks/useRpcHealth";
 import { useTransaction } from "../hooks/useTransaction";
 
 interface Props {
@@ -26,6 +27,7 @@ interface Props {
 export default function Dashboard({ userKey, onSign, refreshTrigger, announce }: Props) {
   const { subscription: sub, loading, refresh } = useSubscription(userKey, refreshTrigger);
   const { toasts, addToast, removeToast } = useToast();
+  const { healthy: rpcHealthy, error: rpcError } = useRpcHealth();
   const cancelTx = useTransaction();
   const ppuTx = useTransaction();
   const [showConfirm, setShowConfirm] = useState(false);
@@ -93,13 +95,30 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce }:
     }
   }
 
-  if (loading) return <SubscriptionCardSkeleton />;
+  if (loading)
+    return (
+      <>
+        {!rpcHealthy && rpcError && (
+          <div className="network-warning" role="alert">
+            <span>⚠️</span>
+            <span>RPC endpoint unreachable: {rpcError}</span>
+          </div>
+        )}
+        <SubscriptionCardSkeleton />
+      </>
+    );
 
   const cancelPending = cancelTx.status === "pending";
   const ppuPending = ppuTx.status === "pending";
 
   return (
     <div className="dashboard">
+      {!rpcHealthy && rpcError && (
+        <div className="network-warning" role="alert">
+          <span>⚠️</span>
+          <span>RPC endpoint unreachable: {rpcError}</span>
+        </div>
+      )}
       {!sub ? (
         <div className="card">
           <p className="no-sub-text">No active subscription found.</p>
@@ -131,11 +150,11 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce }:
                     Increase Allowance
                   </button>
                 </div>
-              <DailyLimitCard
-                userKey={userKey}
-                refreshTrigger={dailyLimitRefresh}
-                onOpen={() => setShowDailyLimit(true)}
-              />
+                <DailyLimitCard
+                  userKey={userKey}
+                  refreshTrigger={dailyLimitRefresh}
+                  onOpen={() => setShowDailyLimit(true)}
+                />
 
               </div>
 

@@ -56,7 +56,7 @@ export interface ContractEvent {
   txHash: string;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 /** Convert a Stellar public key string to an ScVal Address */
 function addressVal(addr: string): xdr.ScVal {
@@ -135,6 +135,81 @@ export async function buildSetDailyLimitTx(user: string, amount: bigint): Promis
     nativeToScVal(amount, { type: "i128" }),
   ]);
 }
+
+export type BatchChargeOutcome =
+  | "Charged"
+  | "Skipped"
+  | "NoSubscription"
+  | "Inactive"
+  | "Paused"
+  | "GracePeriodElapsed"
+  | "Failed";
+
+export async function buildBatchChargeTx(
+  merchantWallet: string,
+  users: string[]
+): Promise<string> {
+  return buildTx(merchantWallet, "batch_charge", [
+    // batch_charge(users: Vec<Address>)
+    users.map((u) => addressVal(u)),
+  ] as unknown as xdr.ScVal[]);
+}
+
+export async function simulateBatchCharge(
+  merchantWallet: string,
+  users: string[]
+): Promise<BatchChargeOutcome[]> {
+  if (users.length === 0) return [];
+
+  const account = await server.getAccount(merchantWallet);
+  const contract = new Contract(CONTRACT_ID);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      // call batch_charge(users: Vec<Address>)
+      contract.call("batch_charge", [users.map((u) => addressVal(u))] as any)
+    )
+    .setTimeout(30)
+    .build();
+
+  const simResult = await server.simulateTransaction(tx);
+  if ("error" in simResult) throw new Error(simResult.error);
+
+  // Best-effort decode of return Vec<ChargeResult>
+  try {
+    const retval = (simResult as any)?.result?.[0]?.retval ?? (simResult as any)?.result?.retval;
+    if (!retval) return [];
+
+    // ScVal Vec access patterns differ across SDK versions; do best-effort.
+    const vecItems =
+      typeof retval.vec === "function"
+        ? (retval.vec() as any[])
+        : retval._value?.vec ?? retval._value?.vec;
+
+    if (!Array.isArray(vecItems)) return [];
+
+    return vecItems.map((item: any) => {
+      const variantName = item?.switch?.()?.name ?? item?.switch?.().name ?? item?.name;
+      if (
+        variantName === "Charged" ||
+        variantName === "Skipped" ||
+        variantName === "NoSubscription" ||
+        variantName === "Inactive" ||
+        variantName === "Paused" ||
+        variantName === "GracePeriodElapsed"
+      ) {
+        return variantName;
+      }
+      return "Failed";
+    });
+  } catch {
+    return [];
+  }
+}
+
 
 export async function getDailyLimit(user: string): Promise<bigint | null> {
   const contract = new Contract(CONTRACT_ID);
@@ -538,3 +613,4 @@ export async function getChargeHistory(user: string): Promise<ChargeEvent[]> {
     return [];
   }
 }
+
