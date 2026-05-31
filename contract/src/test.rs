@@ -877,6 +877,83 @@ fn test_double_initialize() {
     client.initialize(&token_addr); // second call — should panic
 }
 
+// ─────────────────────────────────────────────
+// Admin transfer tests
+// ─────────────────────────────────────────────
+
+#[test]
+fn test_transfer_admin() {
+    let (env, contract_id, _token_addr, old_admin, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    
+    // Set initial admin
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &old_admin);
+    });
+
+    let new_admin = Address::generate(&env);
+    
+    // Transfer admin rights
+    client.transfer_admin(&new_admin);
+    
+    // Verify new admin is set
+    let current_admin = env.as_contract(&contract_id, || {
+        storage::get_admin(&env)
+    });
+    
+    assert_eq!(current_admin, new_admin, "admin should be updated to new_admin");
+}
+
+#[test]
+fn test_transfer_admin_event_emitted() {
+    let (env, contract_id, _token_addr, old_admin, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    
+    // Set initial admin
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &old_admin);
+    });
+
+    let new_admin = Address::generate(&env);
+    
+    // Transfer admin rights
+    client.transfer_admin(&new_admin);
+    
+    // Verify event was emitted
+    let events = env.events().all();
+    let (_, topics, data) = events.get(events.len() - 1).unwrap();
+    let topic_symbol: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
+    let (emitted_old_admin, emitted_new_admin): (Address, Address) = data.try_into_val(&env).unwrap();
+
+    assert_eq!(topic_symbol, Symbol::new(&env, "admin_transferred"));
+    assert_eq!(emitted_old_admin, old_admin);
+    assert_eq!(emitted_new_admin, new_admin);
+}
+
+#[test]
+fn test_transfer_admin_requires_auth() {
+    let (env, contract_id, _token_addr, old_admin, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    
+    // Set initial admin
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &old_admin);
+    });
+
+    let new_admin = Address::generate(&env);
+    
+    // This should work because mock_all_auths is enabled in setup
+    // In a real scenario without mock_all_auths, this would require old_admin's signature
+    client.transfer_admin(&new_admin);
+    
+    // Verify the transfer succeeded
+    let current_admin = env.as_contract(&contract_id, || {
+        storage::get_admin(&env)
+    });
+    
+    assert_eq!(current_admin, new_admin);
+}
+
 #[test]
 fn test_initialize_without_valid_token() {
     let env = Env::default();

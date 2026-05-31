@@ -459,6 +459,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "label"
+                      },
+                      "val": {
+                        "symbol": "default"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "last_charged"
                       },
                       "val": {
@@ -483,10 +491,24 @@
                     },
                     {
                       "key": {
+                        "symbol": "referrer"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "token"
                       },
                       "val": {
                         "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "trial_duration"
+                      },
+                      "val": {
+                        "u64": 0
                       }
                     }
                   ]
@@ -2320,6 +2342,14 @@
                 },
                 {
                   "key": {
+                    "symbol": "label"
+                  },
+                  "val": {
+                    "symbol": "default"
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "last_charged"
                   },
                   "val": {
@@ -2344,10 +2374,24 @@
                 },
                 {
                   "key": {
+                    "symbol": "referrer"
+                  },
+                  "val": "void"
+                },
+                {
+                  "key": {
                     "symbol": "token"
                   },
                   "val": {
                     "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "trial_duration"
+                  },
+                  "val": {
+                    "u64": 0
                   }
                 }
               ]

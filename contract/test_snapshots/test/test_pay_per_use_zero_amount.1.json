@@ -287,6 +287,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "label"
+                      },
+                      "val": {
+                        "symbol": "default"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "last_charged"
                       },
                       "val": {
@@ -311,10 +319,24 @@
                     },
                     {
                       "key": {
+                        "symbol": "referrer"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "token"
                       },
                       "val": {
                         "address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "trial_duration"
+                      },
+                      "val": {
+                        "u64": 0
                       }
                     }
                   ]
@@ -1270,7 +1292,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'amount must be positive' from contract function 'Symbol(obj#255)'"
+                  "string": "caught panic 'amount must be positive' from contract function 'Symbol(obj#261)'"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"

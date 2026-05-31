@@ -468,6 +468,27 @@ impl FlowPay {
         events::publish_contract_unpaused(&env);
     }
 
+    /// Transfers admin rights to a new address.
+    ///
+    /// # Parameters
+    ///
+    /// - `new_admin`: The address that will become the new admin.
+    ///
+    /// # Returns
+    ///
+    /// Returns nothing.
+    ///
+    /// # Auth
+    ///
+    /// Requires authorization from the current admin.
+    ///
+    /// # Side Effects
+    ///
+    /// Updates the admin address in storage and emits `admin_transferred` event.
+    pub fn transfer_admin(env: Env, new_admin: Address) {
+        admin::transfer_admin(&env, &new_admin);
+    }
+
     /// Returns whether the contract is currently paused.
     pub fn is_contract_paused(env: Env) -> bool {
         is_contract_paused(&env)

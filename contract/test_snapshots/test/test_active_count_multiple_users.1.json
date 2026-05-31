@@ -432,6 +432,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "label"
+                      },
+                      "val": {
+                        "symbol": "default"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "last_charged"
                       },
                       "val": {
@@ -456,10 +464,24 @@
                     },
                     {
                       "key": {
+                        "symbol": "referrer"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "token"
                       },
                       "val": {
                         "address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "trial_duration"
+                      },
+                      "val": {
+                        "u64": 0
                       }
                     }
                   ]
@@ -537,6 +559,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "label"
+                      },
+                      "val": {
+                        "symbol": "default"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "last_charged"
                       },
                       "val": {
@@ -561,10 +591,24 @@
                     },
                     {
                       "key": {
+                        "symbol": "referrer"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "token"
                       },
                       "val": {
                         "address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "trial_duration"
+                      },
+                      "val": {
+                        "u64": 0
                       }
                     }
                   ]

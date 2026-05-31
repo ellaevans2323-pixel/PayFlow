@@ -52,3 +52,10 @@ pub fn publish_daily_limit_removed(env: &Env, user: &Address) {
     env.events()
         .publish((Symbol::new(env, "daily_limit_removed"), user.clone()), ());
 }
+
+pub fn publish_admin_transferred(env: &Env, old_admin: &Address, new_admin: &Address) {
+    env.events().publish(
+        (Symbol::new(env, "admin_transferred"),),
+        (old_admin.clone(), new_admin.clone()),
+    );
+}
