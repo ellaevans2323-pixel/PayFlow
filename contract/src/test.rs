@@ -2493,3 +2493,142 @@ fn test_next_charge_at_none_for_unknown_address() {
     let random = Address::generate(&env);
     assert!(client.next_charge_at(&random).is_none());
 }
+
+// ─────────────────────────────────────────────
+// Issue #242: last_charged accuracy after multiple charges
+// ─────────────────────────────────────────────
+
+/// After three charge cycles at different timestamps, last_charged must equal
+/// the ledger timestamp of the **most recent** successful charge exactly.
+/// It must not accumulate offsets or reflect any earlier charge time.
+#[test]
+fn test_last_charged_accuracy_after_multiple_charges() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let amount: i128 = 1_0000000;
+    let interval: u64 = 86_400; // 1 day
+
+    client.subscribe(&user, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    // ── Charge 1 ──────────────────────────────────────────────────────────────
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+    let ts_charge_1 = env.ledger().timestamp();
+    client.charge(&user);
+    let sub_1 = client.get_subscription(&user).unwrap();
+    assert_eq!(
+        sub_1.last_charged, ts_charge_1,
+        "after charge 1: last_charged should equal the charge timestamp"
+    );
+
+    // ── Charge 2 (at a different offset to rule out coincidental equality) ───
+    env.ledger().with_mut(|l| { l.timestamp += interval + 7_777; });
+    let ts_charge_2 = env.ledger().timestamp();
+    assert_ne!(ts_charge_2, ts_charge_1, "charge 2 must be at a different timestamp");
+    client.charge(&user);
+    let sub_2 = client.get_subscription(&user).unwrap();
+    assert_eq!(
+        sub_2.last_charged, ts_charge_2,
+        "after charge 2: last_charged should equal the second charge timestamp"
+    );
+
+    // ── Charge 3 ──────────────────────────────────────────────────────────────
+    env.ledger().with_mut(|l| { l.timestamp += interval + 999; });
+    let ts_charge_3 = env.ledger().timestamp();
+    assert_ne!(ts_charge_3, ts_charge_2, "charge 3 must be at a different timestamp");
+    client.charge(&user);
+    let sub_3 = client.get_subscription(&user).unwrap();
+    assert_eq!(
+        sub_3.last_charged, ts_charge_3,
+        "after charge 3: last_charged should equal the third charge timestamp, not an accumulated offset"
+    );
+
+    // Confirm it does NOT equal earlier charge timestamps
+    assert_ne!(sub_3.last_charged, ts_charge_1, "last_charged must not be ts_charge_1");
+    assert_ne!(sub_3.last_charged, ts_charge_2, "last_charged must not be ts_charge_2");
+}
+
+// ─────────────────────────────────────────────
+// Issue #226: pause_contract() emergency stop
+// ─────────────────────────────────────────────
+
+/// charge() is blocked while the contract is paused and succeeds after unpause.
+#[test]
+fn test_charge_blocked_when_contract_paused() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    // Set caller as admin so pause/unpause are authorised
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &user);
+    });
+
+    let amount: i128 = 1_0000000;
+    let interval: u64 = 86_400;
+
+    client.subscribe(&user, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    // Advance past interval so a charge would normally be valid
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+
+    // Pause the contract
+    client.pause_contract();
+    assert!(client.is_contract_paused(), "contract should be paused");
+
+    // charge() must panic with ContractPaused while paused
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.charge(&user);
+    }));
+    assert!(result.is_err(), "charge() should panic when contract is paused");
+}
+
+/// charge() succeeds immediately after the contract is unpaused.
+#[test]
+fn test_charge_succeeds_after_unpause() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &user);
+    });
+
+    let amount: i128 = 1_0000000;
+    let interval: u64 = 86_400;
+
+    client.subscribe(&user, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+
+    // Pause then immediately unpause
+    client.pause_contract();
+    assert!(client.is_contract_paused());
+    client.unpause_contract();
+    assert!(!client.is_contract_paused(), "contract should be unpaused");
+
+    // charge() must succeed after unpause
+    client.charge(&user);
+    let sub = client.get_subscription(&user).unwrap();
+    assert!(sub.last_charged > 0, "last_charged should be updated after successful charge post-unpause");
+}
+
+/// pay_per_use() is also blocked while the contract is paused.
+#[test]
+fn test_pay_per_use_blocked_when_contract_paused() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &user);
+    });
+
+    client.subscribe(&user, &merchant, &1_0000000, &86_400, &token_addr, &None, &None);
+
+    client.pause_contract();
+    assert!(client.is_contract_paused());
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.pay_per_use(&user, &5_000_000);
+    }));
+    assert!(result.is_err(), "pay_per_use() should panic when contract is paused");
+}
+
