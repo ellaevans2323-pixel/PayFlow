@@ -663,8 +663,8 @@ impl FlowPay {
 
     /// Migrates contract storage to the latest schema version.
     /// Safe to call multiple times — subsequent calls are no-ops.
-    pub fn migrate(env: Env) {
-        migration::migrate(&env);
+    pub fn migrate(env: Env, users: Vec<Address>) {
+        migration::migrate(&env, users);
     }
 
     /// Returns the current storage schema version.
