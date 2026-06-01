@@ -558,7 +558,8 @@ impl FlowPay {
     /// Only the contract admin can call this.
     pub fn set_fee(env: Env, collector: Address, bps: u32) {
         admin::require_admin(&env);
-        fee::set_fee(&env, collector, bps);
+        fee::set_fee(&env, collector.clone(), bps);
+        events::publish_fee_updated(&env, &collector, bps);
     }
 
     // ─────────────────────────────────────────────────────────────
