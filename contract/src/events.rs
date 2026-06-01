@@ -59,3 +59,15 @@ pub fn publish_admin_transferred(env: &Env, old_admin: &Address, new_admin: &Add
         (old_admin.clone(), new_admin.clone()),
     );
 }
+
+pub fn publish_fee_updated(env: &Env, collector: &Address, bps: u32) {
+    env.events().publish(
+        (Symbol::new(env, "fee_updated"),),
+        (collector.clone(), bps),
+    );
+}
+
+pub fn publish_grace_period_updated(env: &Env, seconds: u64) {
+    env.events()
+        .publish((Symbol::new(env, "grace_period_updated"),), seconds);
+}
