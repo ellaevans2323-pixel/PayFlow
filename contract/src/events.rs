@@ -87,6 +87,18 @@ pub fn publish_admin_transferred(env: &Env, old_admin: &Address, new_admin: &Add
     );
 }
 
+pub fn publish_merchant_added(env: &Env, merchant: &Address) {
+    env.events().publish(
+        (Symbol::new(env, "merchant_added"), merchant.clone()),
+        (),
+    );
+}
+
+pub fn publish_merchant_removed(env: &Env, merchant: &Address) {
+    env.events().publish(
+        (Symbol::new(env, "merchant_removed"), merchant.clone()),
+        (),
+    );
 pub fn publish_fee_updated(env: &Env, collector: &Address, bps: u32) {
     env.events().publish(
         (Symbol::new(env, "fee_updated"),),
