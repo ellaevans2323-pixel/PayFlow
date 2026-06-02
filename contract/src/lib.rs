@@ -105,12 +105,13 @@ pub struct FlowPay;
 
 #[contractimpl]
 impl FlowPay {
-    pub fn initialize(env: Env, token: Address) {
+    pub fn initialize(env: Env, token: Address, admin: Address) {
         if env.storage().instance().has(&DataKey::Token) {
             panic!("already initialized");
         }
 
         env.storage().instance().set(&DataKey::Token, &token);
+        admin::initialize_admin(&env, &admin);
     }
 
     /// Creates or replaces a recurring subscription for `user`.
@@ -265,14 +266,28 @@ impl FlowPay {
 
         let token = token::Client::new(&env, &sub.token);
 
+        let mut merchant_amount = sub.amount;
+        if let Some((collector, bps)) = fee::get_fee(&env) {
+            let fee_amount = (sub.amount * (bps as i128)) / 10_000;
+            if fee_amount > 0 {
+                token.transfer_from(
+                    &env.current_contract_address(),
+                    &user,
+                    &collector,
+                    &fee_amount,
+                );
+                merchant_amount = sub.amount - fee_amount;
+            }
+        }
+
         token.transfer_from(
             &env.current_contract_address(),
             &user,
             &sub.merchant,
-            &sub.amount,
+            &merchant_amount,
         );
 
-        merchant_stats::increment_revenue_with_daily(&env, &sub.merchant, sub.amount);
+        merchant_stats::increment_revenue_with_daily(&env, &sub.merchant, merchant_amount);
 
         sub.last_charged = now;
 
@@ -336,14 +351,28 @@ impl FlowPay {
 
         let token = token::Client::new(&env, &sub.token);
 
+        let mut merchant_amount = amount;
+        if let Some((collector, bps)) = fee::get_fee(&env) {
+            let fee_amount = (amount * (bps as i128)) / 10_000;
+            if fee_amount > 0 {
+                token.transfer_from(
+                    &env.current_contract_address(),
+                    &user,
+                    &collector,
+                    &fee_amount,
+                );
+                merchant_amount = amount - fee_amount;
+            }
+        }
+
         token.transfer_from(
             &env.current_contract_address(),
             &user,
             &sub.merchant,
-            &amount,
+            &merchant_amount,
         );
 
-        merchant_stats::increment_revenue_with_daily(&env, &sub.merchant, amount);
+        merchant_stats::increment_revenue_with_daily(&env, &sub.merchant, merchant_amount);
         spending_limit::record_spend(&env, &user, amount);
 
         events::publish_pay_per_use(&env, &user, &sub.merchant, amount);

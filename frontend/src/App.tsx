@@ -10,6 +10,7 @@ import { useContractId } from "./hooks/useContractId";
 import { useRpcHealth } from "./hooks/useRpcHealth";
 import { useSubscriberCount } from "./hooks/useSubscriberCount";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useAnalytics } from "./hooks/useAnalytics";
 import SubscribeForm from "./components/SubscribeForm";
 import Dashboard from "./components/Dashboard";
 import MerchantDashboard from "./components/MerchantDashboard";
@@ -98,6 +99,7 @@ export default function App() {
   const [tab, setTab] = useLocalStorage<"subscribe" | "dashboard" | "merchant">("flowpay_tab", "dashboard");
   const [refresh, setRefresh] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
+  const { isOptedIn: analyticsEnabled, setOptIn: setAnalyticsOptIn, track } = useAnalytics();
   const subscribeErrorBoundaryRef = useRef<ErrorBoundary>(null);
   const dashboardErrorBoundaryRef = useRef<ErrorBoundary>(null);
   const merchantErrorBoundaryRef = useRef<ErrorBoundary>(null);
@@ -146,6 +148,11 @@ export default function App() {
       },
     ],
   });
+
+  async function handleConnectWallet() {
+    await connect();
+    track("wallet_connect");
+  }
 
   return (
     <div className={`app-shell${isMobile ? " app-shell--mobile" : ""}`}>
@@ -291,7 +298,30 @@ export default function App() {
 
       {/* Freighter installed but not connected */}
       {freighterAvailable && !publicKey && (
-        <ConnectWallet onConnect={connect} error={error} loading={connecting} />
+        <>
+          <div className="card connect-wallet">
+            <p className="connect-wallet__hint">
+              Help improve FlowPay with optional anonymous usage analytics.
+            </p>
+            <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+              <button
+                className={`btn-secondary${analyticsEnabled ? " active" : ""}`}
+                onClick={() => setAnalyticsOptIn(true)}
+                type="button"
+              >
+                Opt in
+              </button>
+              <button
+                className={`btn-secondary${!analyticsEnabled ? " active" : ""}`}
+                onClick={() => setAnalyticsOptIn(false)}
+                type="button"
+              >
+                Keep disabled
+              </button>
+            </div>
+          </div>
+          <ConnectWallet onConnect={handleConnectWallet} error={error} loading={connecting} />
+        </>
       )}
 
       {/* Connected */}
@@ -321,6 +351,7 @@ export default function App() {
                 <SubscribeForm
                   userKey={publicKey}
                   onSign={signAndSubmit}
+                  onSubscribed={() => track("subscribe")}
                   onSuccess={() => {
                     setTab("dashboard");
                     setRefresh((r) => r + 1);
@@ -359,6 +390,8 @@ export default function App() {
                   onSign={signAndSubmit}
                   refreshTrigger={refresh}
                   announce={announce}
+                  onCancelled={() => track("cancel")}
+                  onPayPerUse={(amount) => track("pay_per_use", { amount: amount.toString() })}
                 />
               </ErrorBoundary>
             )}

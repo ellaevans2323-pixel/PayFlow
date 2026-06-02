@@ -139,6 +139,68 @@ fn test_charge_exact_transfer_amount() {
     );
 }
 
+#[test]
+fn test_charge_applies_protocol_fee_and_records_net_revenue() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    let token = TokenClient::new(&env, &token_addr);
+    let admin = Address::generate(&env);
+    let collector = Address::generate(&env);
+
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &admin);
+    });
+    client.set_fee(&collector, &500u32); // 5%
+
+    let amount: i128 = 10_0000000;
+    let expected_fee: i128 = 500_0000;
+    let expected_net: i128 = amount - expected_fee;
+    let interval: u64 = 86400;
+
+    client.subscribe(&user, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    let merchant_before = token.balance(&merchant);
+    let collector_before = token.balance(&collector);
+
+    env.ledger().with_mut(|l| {
+        l.timestamp += interval + 1;
+    });
+    client.charge(&user);
+
+    assert_eq!(token.balance(&merchant) - merchant_before, expected_net);
+    assert_eq!(token.balance(&collector) - collector_before, expected_fee);
+    assert_eq!(client.get_merchant_revenue(&merchant), expected_net);
+}
+
+#[test]
+fn test_charge_with_zero_fee_bps_skips_fee_transfer() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    let token = TokenClient::new(&env, &token_addr);
+    let admin = Address::generate(&env);
+    let collector = Address::generate(&env);
+
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &admin);
+    });
+    client.set_fee(&collector, &0u32);
+
+    let amount: i128 = 5_0000000;
+    let interval: u64 = 86400;
+    client.subscribe(&user, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    let merchant_before = token.balance(&merchant);
+    let collector_before = token.balance(&collector);
+
+    env.ledger().with_mut(|l| {
+        l.timestamp += interval + 1;
+    });
+    client.charge(&user);
+
+    assert_eq!(token.balance(&merchant) - merchant_before, amount);
+    assert_eq!(token.balance(&collector) - collector_before, 0);
+}
+
 /// subscribe() must store all Subscription fields exactly as provided.
 #[test]
 fn test_subscription_struct_fields_match_input() {
@@ -318,6 +380,58 @@ fn test_pay_per_use() {
 }
 
 #[test]
+fn test_pay_per_use_applies_protocol_fee_and_records_net_revenue() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    let token = TokenClient::new(&env, &token_addr);
+    let admin = Address::generate(&env);
+    let collector = Address::generate(&env);
+
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &admin);
+    });
+    client.set_fee(&collector, &250u32); // 2.5%
+
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+
+    let amount: i128 = 8_0000000;
+    let expected_fee: i128 = 200_0000;
+    let expected_net: i128 = amount - expected_fee;
+    let merchant_before = token.balance(&merchant);
+    let collector_before = token.balance(&collector);
+
+    client.pay_per_use(&user, &amount);
+
+    assert_eq!(token.balance(&merchant) - merchant_before, expected_net);
+    assert_eq!(token.balance(&collector) - collector_before, expected_fee);
+    assert_eq!(client.get_merchant_revenue(&merchant), expected_net);
+}
+
+#[test]
+fn test_pay_per_use_with_zero_fee_bps_transfers_full_amount() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    let token = TokenClient::new(&env, &token_addr);
+    let admin = Address::generate(&env);
+    let collector = Address::generate(&env);
+
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &admin);
+    });
+    client.set_fee(&collector, &0u32);
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+
+    let amount: i128 = 3_0000000;
+    let merchant_before = token.balance(&merchant);
+    let collector_before = token.balance(&collector);
+
+    client.pay_per_use(&user, &amount);
+
+    assert_eq!(token.balance(&merchant) - merchant_before, amount);
+    assert_eq!(token.balance(&collector) - collector_before, 0);
+}
+
+#[test]
 #[should_panic]
 fn test_pay_per_use_inactive() {
     let (env, contract_id, token_addr, user, merchant) = setup();
@@ -393,9 +507,10 @@ fn test_pay_per_use_exceeds_cap() {
 fn test_initialize_backward_compat() {
     let (env, contract_id, token_addr, user, merchant) = setup();
     let client = FlowPayClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
 
     // initialize with a default token — should not affect per-sub token
-    client.initialize(&token_addr);
+    client.initialize(&token_addr, &admin);
 
     let token_b = setup_second_token(&env, &contract_id, &user);
     client.subscribe(&user, &merchant, &1_0000000, &86400, &token_b, &None, &None);
@@ -1150,9 +1265,10 @@ fn test_ttl_extension() {
 fn test_double_initialize() {
     let (env, contract_id, token_addr, _user, _merchant) = setup();
     let client = FlowPayClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
 
-    client.initialize(&token_addr); // first call
-    client.initialize(&token_addr); // second call — should panic
+    client.initialize(&token_addr, &admin); // first call
+    client.initialize(&token_addr, &admin); // second call — should panic
 }
 
 // ─────────────────────────────────────────────
@@ -1249,6 +1365,7 @@ fn test_accept_admin_without_proposal_panics() {
 #[test]
 fn test_initialize_without_valid_token() {
     let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register_contract(None, FlowPay);
     let client = FlowPayClient::new(&env, &contract_id);
 
@@ -1256,8 +1373,9 @@ fn test_initialize_without_valid_token() {
     // The contract currently does not validate if the address is a valid token contract
     // or even if it's a contract at all.
     let invalid_token = Address::generate(&env);
+    let admin = Address::generate(&env);
     
-    client.initialize(&invalid_token);
+    client.initialize(&invalid_token, &admin);
     
     // Success means it didn't panic, which is the current expected behavior.
 }
@@ -1405,8 +1523,9 @@ fn test_get_token_returns_none_when_not_initialized() {
 fn test_get_token_returns_initialized_token() {
     let (env, contract_id, token_addr, _user, _merchant) = setup();
     let client = FlowPayClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
 
-    client.initialize(&token_addr);
+    client.initialize(&token_addr, &admin);
     assert_eq!(client.get_token(), Some(token_addr));
 }
 

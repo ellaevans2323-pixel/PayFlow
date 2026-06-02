@@ -8,6 +8,11 @@ pub fn require_admin(env: &Env) {
     admin.require_auth();
 }
 
+pub fn initialize_admin(env: &Env, admin: &Address) {
+    admin.require_auth();
+    set_admin(env, admin);
+}
+
 /// Step 1: current admin proposes a new admin.
 /// The proposed address must call accept_admin() to complete the transfer.
 pub fn transfer_admin(env: &Env, new_admin: &Address) {

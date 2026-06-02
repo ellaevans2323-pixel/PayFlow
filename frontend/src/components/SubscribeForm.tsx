@@ -15,9 +15,10 @@ interface Props {
   onSign: (xdr: string) => Promise<string>;
   onSuccess: () => void;
   announce: (message: string) => void;
+  onSubscribed?: () => void;
 }
 
-export default function SubscribeForm({ userKey, onSign, onSuccess, announce }: Props) {
+export default function SubscribeForm({ userKey, onSign, onSuccess, announce, onSubscribed }: Props) {
   const [merchant, setMerchant] = useState("");
   const [amount, setAmount] = useState("");
   const [interval, setInterval] = useState(BILLING_INTERVALS[2].value);
@@ -47,6 +48,7 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce }: 
     if (hash) {
       addToast("Subscribed!", "success", hash);
       announce("Transaction confirmed");
+      onSubscribed?.();
       onSuccess();
     } else if (tx.error) {
       const msg = `Error: ${friendlyError(tx.error)}`;

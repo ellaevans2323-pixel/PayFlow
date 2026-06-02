@@ -22,9 +22,11 @@ interface Props {
   onSign: (xdr: string) => Promise<string>;
   refreshTrigger: number;
   announce: (message: string) => void;
+  onCancelled?: () => void;
+  onPayPerUse?: (amount: bigint) => void;
 }
 
-export default function Dashboard({ userKey, onSign, refreshTrigger, announce }: Props) {
+export default function Dashboard({ userKey, onSign, refreshTrigger, announce, onCancelled, onPayPerUse }: Props) {
   const { subscription: sub, loading, refresh } = useSubscription(userKey, refreshTrigger);
   const { toasts, addToast, removeToast } = useToast();
   const { healthy: rpcHealthy, error: rpcError } = useRpcHealth();
@@ -76,6 +78,7 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce }:
       });
       addToast("Cancelled.", "success", hash);
       announce("Transaction confirmed");
+      onCancelled?.();
       refresh();
     } catch (e: unknown) {
       const msg = `Error: ${friendlyError(e instanceof Error ? e.message : String(e))}`;
@@ -93,6 +96,7 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce }:
       });
       addToast("Paid!", "success", hash);
       announce("Transaction confirmed");
+      onPayPerUse?.(stroops);
     } catch (e: unknown) {
       const msg = `Error: ${friendlyError(e instanceof Error ? e.message : String(e))}`;
       addToast(msg, "error");
