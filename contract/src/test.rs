@@ -1816,6 +1816,23 @@ fn test_charge_history_capped_at_12() {
 }
 
 #[test]
+fn test_clear_charge_history() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let interval: u64 = 86400;
+    client.subscribe(&user, &merchant, &1_0000000, &interval, &token_addr, &None, &None);
+
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+    client.charge(&user);
+
+    assert_eq!(client.get_charge_history(&user).len(), 1);
+
+    client.clear_charge_history(&user);
+    assert_eq!(client.get_charge_history(&user).len(), 0);
+}
+
+#[test]
 fn test_ttl_extension() {
     let (env, contract_id, token_addr, user, merchant) = setup();
     let client = FlowPayClient::new(&env, &contract_id);

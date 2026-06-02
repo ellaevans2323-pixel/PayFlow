@@ -784,6 +784,10 @@ impl FlowPay {
         subscription_history::get_charge_history(&env, &user)
     }
 
+    /// Clears the charge history for a subscriber.
+    pub fn clear_charge_history(env: Env, user: Address) {
+        user.require_auth();
+        subscription_history::clear_charge_history(&env, &user);
     /// Returns a paginated slice of charge timestamps for a subscriber.
     /// limit is capped at 12.
     pub fn get_charge_history_page(env: Env, user: Address, offset: u32, limit: u32) -> Vec<u64> {
