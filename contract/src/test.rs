@@ -916,6 +916,48 @@ fn test_contract_pause_events_emitted() {
     assert_last_event(&env, "contract_unpaused");
 }
 
+// ─────────────────────────────────────────────
+// Migration tests
+// ─────────────────────────────────────────────
+
+#[test]
+fn test_migrate_v1_to_v2() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    // Manually construct and store a V1 subscription
+    let v1_sub = crate::migration::SubscriptionV1 {
+        merchant: merchant.clone(),
+        amount: 1_0000000,
+        interval: 86400,
+        last_charged: env.ledger().timestamp(),
+        active: true,
+        token: token_addr.clone(),
+        referrer: None,
+        label: Symbol::new(&env, "v1_label"),
+        trial_duration: 0,
+    };
+    
+    env.as_contract(&contract_id, || {
+        env.storage()
+            .persistent()
+            .set(&crate::DataKey::Subscription(user.clone()), &v1_sub);
+    });
+
+    let mut users = soroban_sdk::Vec::new(&env);
+    users.push_back(user.clone());
+
+    client.migrate(&users);
+
+    // Verify it was upgraded to V2
+    let v2_sub = client.get_subscription(&user).unwrap();
+    assert_eq!(v2_sub.merchant, merchant);
+    assert_eq!(v2_sub.amount, 1_0000000);
+    assert_eq!(v2_sub.active, true);
+    assert_eq!(v2_sub.paused, false); // This is the newly added field
+    assert_eq!(v2_sub.label, Symbol::new(&env, "v1_label"));
+}
+
 #[test]
 fn test_upgrade_event_emitted() {
     let (env, contract_id, _token_addr, user, _merchant) = setup();
