@@ -663,6 +663,29 @@ fn test_batch_charge_inactive() {
     assert_eq!(results.get(0).unwrap(), crate::ChargeResult::Inactive);
 }
 
+#[test]
+fn test_batch_charge_grace_period_elapsed() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &user);
+    });
+    client.set_grace_period(&86400);
+
+    let interval: u64 = 86400;
+    client.subscribe(&user, &merchant, &1_0000000, &interval, &token_addr, &None, &None);
+
+    // Advance ledger beyond interval + grace period
+    env.ledger().with_mut(|l| { l.timestamp += interval + 86400 + 1; });
+
+    let mut users = soroban_sdk::Vec::new(&env);
+    users.push_back(user.clone());
+
+    let results = client.batch_charge(&users);
+    assert_eq!(results.get(0).unwrap(), crate::ChargeResult::GracePeriodElapsed);
+}
+
 // ─────────────────────────────────────────────
 // subscription_count tests
 // ─────────────────────────────────────────────
