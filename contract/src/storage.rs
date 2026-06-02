@@ -29,6 +29,12 @@ pub fn get_admin(env: &Env) -> Address {
         .expect("admin not set")
 }
 
+pub fn get_admin_optional(env: &Env) -> Option<Address> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Admin)
+}
+
 pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
 }

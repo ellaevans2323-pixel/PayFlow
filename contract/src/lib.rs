@@ -576,6 +576,9 @@ impl FlowPay {
         is_contract_paused(&env)
     }
 
+    /// Returns the current admin address, or `None` if no admin has been set.
+    pub fn get_admin(env: Env) -> Option<Address> {
+        storage::get_admin_optional(&env)
     /// Returns the default token address set during `initialize()`, or `None` if not initialized.
     pub fn get_token(env: Env) -> Option<Address> {
         storage::get_token(&env)

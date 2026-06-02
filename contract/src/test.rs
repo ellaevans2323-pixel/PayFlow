@@ -2345,6 +2345,25 @@ fn test_subscribe_overwrites_cancelled_subscription() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Issue #225: get_admin() read function tests
+// ─────────────────────────────────────────────────────────────
+
+#[test]
+fn test_get_admin_returns_none_when_not_set() {
+    let (env, contract_id, _token_addr, _user, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    assert!(client.get_admin().is_none());
+}
+
+#[test]
+fn test_get_admin_returns_set_admin() {
+    let (env, contract_id, _token_addr, admin, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &admin);
+    });
+    assert_eq!(client.get_admin(), Some(admin));
+}
 // Issue #240: reset_merchant_revenue (admin only) tests
 // ─────────────────────────────────────────────────────────────
 
