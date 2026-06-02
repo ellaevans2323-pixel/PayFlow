@@ -67,6 +67,8 @@ pub enum DataKey {
     ChargeHistory(Address),
     // Feature: emergency contract pause
     ContractPaused,
+    // Feature: per-merchant subscriber count
+    MerchantSubCount(Address),
     // Pending admin for two-step transfer
     PendingAdmin,
 }
@@ -219,6 +221,7 @@ impl FlowPay {
             subscription_count::increment(&env);
         }
         referral::store_referral(&env, &user, &referrer);
+        merchant_stats::increment_subscriber_count(&env, &sub.merchant);
         events::publish_subscribed(&env, &user, &sub);
     }
 
@@ -429,6 +432,13 @@ impl FlowPay {
             .get(&key)
             .expect("no subscription found");
 
+        sub.active = false;
+
+        env.storage().persistent().set(&key, &sub);
+
+        subscription_count::decrement(&env);
+        merchant_stats::decrement_subscriber_count(&env, &sub.merchant);
+        events::publish_cancelled(&env, &user);
         if sub.active {
             sub.active = false;
             env.storage().persistent().set(&key, &sub);
@@ -695,6 +705,9 @@ impl FlowPay {
         merchant_stats::get_merchant_revenue_history(&env, &merchant, days)
     }
 
+    /// Returns the number of active subscribers for a given merchant.
+    pub fn get_merchant_subscriber_count(env: Env, merchant: Address) -> u64 {
+        merchant_stats::get_merchant_subscriber_count(&env, &merchant)
     /// Resets a merchant's cumulative revenue counter to zero.
     /// Only the contract admin can call this.
     pub fn reset_merchant_revenue(env: Env, merchant: Address) {

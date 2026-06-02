@@ -60,6 +60,30 @@ pub fn increment_revenue_with_daily(env: &Env, merchant: &Address, amount: i128)
         .set(&key, &(current_day + amount));
 }
 
+/// Returns the number of active subscribers for a merchant.
+pub fn get_merchant_subscriber_count(env: &Env, merchant: &Address) -> u64 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::MerchantSubCount(merchant.clone()))
+        .unwrap_or(0u64)
+}
+
+/// Increments the per-merchant subscriber count by 1.
+pub fn increment_subscriber_count(env: &Env, merchant: &Address) {
+    let count = get_merchant_subscriber_count(env, merchant);
+    env.storage()
+        .persistent()
+        .set(&DataKey::MerchantSubCount(merchant.clone()), &(count + 1));
+}
+
+/// Decrements the per-merchant subscriber count by 1 (floor 0).
+pub fn decrement_subscriber_count(env: &Env, merchant: &Address) {
+    let count = get_merchant_subscriber_count(env, merchant);
+    if count > 0 {
+        env.storage()
+            .persistent()
+            .set(&DataKey::MerchantSubCount(merchant.clone()), &(count - 1));
+    }
 /// Resets a merchant's cumulative revenue counter to zero.
 pub fn reset_merchant_revenue(env: &Env, merchant: &Address) {
     env.storage()

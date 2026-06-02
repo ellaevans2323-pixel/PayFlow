@@ -93,6 +93,12 @@ pub fn publish_admin_transferred(env: &Env, old_admin: &Address, new_admin: &Add
     );
 }
 
+pub fn publish_referred(env: &Env, user: &Address, referrer: &Address) {
+    env.events().publish(
+        (Symbol::new(env, "referred"), user.clone()),
+        referrer.clone(),
+    );
+}
 pub fn publish_fee_updated(env: &Env, collector: &Address, bps: u32) {
     env.events()
         .publish((Symbol::new(env, "fee_updated"),), (collector.clone(), bps));

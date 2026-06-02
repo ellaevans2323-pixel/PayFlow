@@ -593,7 +593,35 @@ fn test_pay_per_use_with_zero_fee_bps_transfers_full_amount() {
 
 #[test]
 #[should_panic]
-fn test_pay_per_use_inactive() {
+fn test_pay_per_use_exhausts_allowance() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_addr = token_id.address();
+    let contract_id = env.register_contract(None, FlowPay);
+    let user = Address::generate(&env);
+    let merchant = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&user, &10_0000000);
+
+    // Approve only 6 stroops total
+    let token = TokenClient::new(&env, &token_addr);
+    token.approve(&user, &contract_id, &6_0000000, &200);
+
+    let client = FlowPayClient::new(&env, &contract_id);
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+
+    // Each call spends 3; second call exhausts the remaining allowance
+    client.pay_per_use(&user, &3_0000000);
+    client.pay_per_use(&user, &3_0000000);
+    // Allowance is now 0 — this must panic
+    client.pay_per_use(&user, &1_0000000);
+}
+
+
     let (env, contract_id, token_addr, user, merchant) = setup();
     let client = FlowPayClient::new(&env, &contract_id);
 
@@ -1577,8 +1605,172 @@ fn test_upgrade_event_emitted() {
 }
 
 // ─────────────────────────────────────────────
-// Issue #96: referral tracking tests
+// Issue: per-merchant subscriber count tests
 // ─────────────────────────────────────────────
+
+#[test]
+fn test_merchant_subscriber_count_increments_on_subscribe() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    assert_eq!(client.get_merchant_subscriber_count(&merchant), 0);
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+    assert_eq!(client.get_merchant_subscriber_count(&merchant), 1);
+}
+
+#[test]
+fn test_merchant_subscriber_count_decrements_on_cancel() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+    assert_eq!(client.get_merchant_subscriber_count(&merchant), 1);
+    client.cancel(&user);
+    assert_eq!(client.get_merchant_subscriber_count(&merchant), 0);
+}
+
+#[test]
+fn test_merchant_subscriber_count_multiple_users() {
+    let (env, contract_id, token_addr, user_a, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let user_b = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&user_b, &10_000_0000000);
+    let token = TokenClient::new(&env, &token_addr);
+    token.approve(&user_b, &contract_id, &10_000_0000000, &200);
+
+    client.subscribe(&user_a, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+    client.subscribe(&user_b, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+    assert_eq!(client.get_merchant_subscriber_count(&merchant), 2);
+
+    client.cancel(&user_a);
+    assert_eq!(client.get_merchant_subscriber_count(&merchant), 1);
+}
+
+#[test]
+fn test_merchant_subscriber_count_isolated_per_merchant() {
+    let (env, contract_id, token_addr, user_a, merchant_a) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let user_b = Address::generate(&env);
+    let merchant_b = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&user_b, &10_000_0000000);
+    let token = TokenClient::new(&env, &token_addr);
+    token.approve(&user_b, &contract_id, &10_000_0000000, &200);
+
+    client.subscribe(&user_a, &merchant_a, &1_0000000, &86400, &token_addr, &None, &None);
+    client.subscribe(&user_b, &merchant_b, &1_0000000, &86400, &token_addr, &None, &None);
+
+    assert_eq!(client.get_merchant_subscriber_count(&merchant_a), 1);
+    assert_eq!(client.get_merchant_subscriber_count(&merchant_b), 1);
+}
+
+// ─────────────────────────────────────────────
+// Issue: events.rs publish helpers isolation tests
+// ─────────────────────────────────────────────
+
+#[test]
+fn test_publish_subscribed_event() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let amount: i128 = 1_0000000;
+    let interval: u64 = 86400;
+    client.subscribe(&user, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    let events = env.events().all();
+    let subscribed = events.iter().find(|(_, topics, _)| {
+        topics.get(0).unwrap().try_into_val::<_, Symbol>(&env)
+            .map(|s| s == Symbol::new(&env, "subscribed"))
+            .unwrap_or(false)
+    });
+    assert!(subscribed.is_some(), "subscribed event must be emitted");
+    let (_, topics, data) = subscribed.unwrap();
+    let topic_user: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
+    let (emitted_merchant, emitted_amount, emitted_interval): (Address, i128, u64) =
+        data.try_into_val(&env).unwrap();
+    assert_eq!(topic_user, user);
+    assert_eq!(emitted_merchant, merchant);
+    assert_eq!(emitted_amount, amount);
+    assert_eq!(emitted_interval, interval);
+}
+
+#[test]
+fn test_publish_charged_event() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let amount: i128 = 1_0000000;
+    let interval: u64 = 86400;
+    client.subscribe(&user, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+    let charge_time = env.ledger().timestamp();
+    client.charge(&user);
+
+    let events = env.events().all();
+    let charged = events.iter().find(|(_, topics, _)| {
+        topics.get(0).unwrap().try_into_val::<_, Symbol>(&env)
+            .map(|s| s == Symbol::new(&env, "charged"))
+            .unwrap_or(false)
+    });
+    assert!(charged.is_some(), "charged event must be emitted");
+    let (_, topics, data) = charged.unwrap();
+    let topic_user: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
+    let (emitted_merchant, emitted_amount, emitted_at): (Address, i128, u64) =
+        data.try_into_val(&env).unwrap();
+    assert_eq!(topic_user, user);
+    assert_eq!(emitted_merchant, merchant);
+    assert_eq!(emitted_amount, amount);
+    assert_eq!(emitted_at, charge_time);
+}
+
+#[test]
+fn test_publish_cancelled_event() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+    client.cancel(&user);
+
+    let events = env.events().all();
+    let cancelled = events.iter().find(|(_, topics, _)| {
+        topics.get(0).unwrap().try_into_val::<_, Symbol>(&env)
+            .map(|s| s == Symbol::new(&env, "cancelled"))
+            .unwrap_or(false)
+    });
+    assert!(cancelled.is_some(), "cancelled event must be emitted");
+    let (_, topics, _) = cancelled.unwrap();
+    let topic_user: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
+    assert_eq!(topic_user, user);
+}
+
+#[test]
+fn test_publish_pay_per_use_event() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let amount: i128 = 3_0000000;
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+    client.pay_per_use(&user, &amount);
+
+    let events = env.events().all();
+    let ppu = events.iter().find(|(_, topics, _)| {
+        topics.get(0).unwrap().try_into_val::<_, Symbol>(&env)
+            .map(|s| s == Symbol::new(&env, "pay_per_use"))
+            .unwrap_or(false)
+    });
+    assert!(ppu.is_some(), "pay_per_use event must be emitted");
+    let (_, topics, data) = ppu.unwrap();
+    let topic_user: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
+    let (emitted_merchant, emitted_amount): (Address, i128) = data.try_into_val(&env).unwrap();
+    assert_eq!(topic_user, user);
+    assert_eq!(emitted_merchant, merchant);
+    assert_eq!(emitted_amount, amount);
+}
+
 
 #[test]
 fn test_referral_stored_on_subscribe() {
@@ -1596,7 +1788,23 @@ fn test_referral_stored_on_subscribe() {
         &Some(referrer.clone()),
     );
 
-    assert_eq!(client.get_referrer(&user), Some(referrer));
+    assert_eq!(client.get_referrer(&user), Some(referrer.clone()));
+
+    // Verify referred event was emitted
+    let events = env.events().all();
+    let referred_event = events.iter().find(|(_, topics, _)| {
+        if let Ok(sym) = topics.get(0).unwrap().try_into_val::<_, Symbol>(&env) {
+            sym == Symbol::new(&env, "referred")
+        } else {
+            false
+        }
+    });
+    assert!(referred_event.is_some(), "referred event should be emitted");
+    let (_, topics, data) = referred_event.unwrap();
+    let topic_user: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
+    let emitted_referrer: Address = data.try_into_val(&env).unwrap();
+    assert_eq!(topic_user, user);
+    assert_eq!(emitted_referrer, referrer);
 }
 
 #[test]
