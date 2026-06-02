@@ -28,6 +28,9 @@ pub fn remove_daily_limit(env: &Env, user: &Address) {
     env.storage()
         .temporary()
         .remove(&DataKey::DailyLimit(user.clone()));
+    env.storage()
+        .temporary()
+        .remove(&DataKey::DailySpent(user.clone()));
 }
 
 /// Returns how much the user has spent today, defaulting to 0.

@@ -195,6 +195,21 @@ fn test_subscribe_whitelisted_merchant_succeeds() {
 
     let sub = client.get_subscription(&user).unwrap();
     assert_eq!(sub.merchant, merchant);
+    assert!(client.is_merchant_whitelisted(&merchant));
+}
+
+#[test]
+fn test_is_merchant_whitelisted_returns_false_for_non_whitelisted() {
+    let (env, contract_id, _token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &admin);
+    });
+
+    client.set_whitelist_enabled(&true);
+    assert!(!client.is_merchant_whitelisted(&merchant));
 }
 
 #[test]
@@ -905,6 +920,18 @@ fn test_daily_limit_removed_event_emitted() {
     assert_last_user_event(&env, "daily_limit_removed", &user);
 }
 
+#[test]
+fn test_remove_daily_limit_allows_pay_per_use_after_removal() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+    client.set_daily_limit(&user, &3_0000000);
+    client.pay_per_use(&user, &2_0000000);
+    client.remove_daily_limit(&user);
+    client.pay_per_use(&user, &2_0000000); // should succeed after removal
+}
+
 // ─────────────────────────────────────────────
 // Contract admin event tests
 // ─────────────────────────────────────────────
@@ -1455,6 +1482,33 @@ fn test_set_fee_emits_event() {
     assert_eq!(topic_symbol, Symbol::new(&env, "fee_updated"));
     assert_eq!(emitted_collector, collector);
     assert_eq!(emitted_bps, 100u32);
+}
+
+#[test]
+fn test_get_fee_returns_current_fee_settings() {
+    let (env, contract_id, _token_addr, user, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &user);
+    });
+
+    let collector = Address::generate(&env);
+    client.set_fee(&collector, &250u32);
+
+    assert_eq!(client.get_fee(), Some((collector, 250u32)));
+}
+
+#[test]
+#[should_panic]
+fn test_set_fee_invalid_bps_panics() {
+    let (env, contract_id, _token_addr, user, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+    env.as_contract(&contract_id, || {
+        storage::set_admin(&env, &user);
+    });
+
+    let collector = Address::generate(&env);
+    client.set_fee(&collector, &10_001u32);
 }
 
 // ─────────────────────────────────────────────
