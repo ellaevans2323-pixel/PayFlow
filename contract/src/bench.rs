@@ -21,6 +21,15 @@
 /// These numbers are printed at runtime (see `--nocapture`).  Update the
 /// table above whenever a deliberate change shifts the baseline by more
 /// than ~5 %.
+///
+/// Budget baselines were recorded with Soroban SDK 21.0.0 on 2026-06-01.
+/// Each threshold includes ~10% headroom to catch regressions without
+/// failing on minor environment variation.
+pub const MAX_SUBSCRIBE_INSTRUCTIONS: u64 = 4_620_000;
+pub const MAX_CHARGE_INSTRUCTIONS: u64 = 4_180_000;
+pub const MAX_PAY_PER_USE_INSTRUCTIONS: u64 = 3_960_000;
+pub const MAX_BATCH_10_INSTRUCTIONS: u64 = 30_800_000;
+
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -90,7 +99,7 @@ fn bench_subscribe() {
     let interval: u64 = 30 * 24 * 60 * 60; // 30 days
 
     // Reset budget immediately before the call under measurement.
-    env.budget().reset_default();
+    env.budget().reset_unlimited();
 
     client.subscribe(
         &user,
@@ -102,16 +111,23 @@ fn bench_subscribe() {
         &None,
     );
 
-    let cpu = env.budget().cpu_instruction_cost();
+    let cpu = env.budget().cpu_instruction_count();
     let mem = env.budget().memory_bytes_cost();
+
+    env.budget().reset_default();
 
     println!("\n[bench_subscribe]");
     println!("  CPU Instructions : {}", cpu);
     println!("  Memory Bytes     : {}", mem);
 
-    // Sanity: the call must have consumed *some* resources.
     assert!(cpu > 0, "subscribe() must consume CPU instructions");
     assert!(mem > 0, "subscribe() must consume memory");
+    assert!(
+        cpu <= MAX_SUBSCRIBE_INSTRUCTIONS,
+        "subscribe() CPU ({}) exceeds budget threshold ({})",
+        cpu,
+        MAX_SUBSCRIBE_INSTRUCTIONS
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,12 +165,14 @@ fn bench_charge() {
     });
 
     // Reset budget immediately before the call under measurement.
-    env.budget().reset_default();
+    env.budget().reset_unlimited();
 
     client.charge(&user);
 
-    let cpu = env.budget().cpu_instruction_cost();
+    let cpu = env.budget().cpu_instruction_count();
     let mem = env.budget().memory_bytes_cost();
+
+    env.budget().reset_default();
 
     println!("\n[bench_charge]");
     println!("  CPU Instructions : {}", cpu);
@@ -162,6 +180,12 @@ fn bench_charge() {
 
     assert!(cpu > 0, "charge() must consume CPU instructions");
     assert!(mem > 0, "charge() must consume memory");
+    assert!(
+        cpu <= MAX_CHARGE_INSTRUCTIONS,
+        "charge() CPU ({}) exceeds budget threshold ({})",
+        cpu,
+        MAX_CHARGE_INSTRUCTIONS
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,12 +214,14 @@ fn bench_pay_per_use() {
     );
 
     // Reset budget immediately before the call under measurement.
-    env.budget().reset_default();
+    env.budget().reset_unlimited();
 
     client.pay_per_use(&user, &5_0000000);
 
-    let cpu = env.budget().cpu_instruction_cost();
+    let cpu = env.budget().cpu_instruction_count();
     let mem = env.budget().memory_bytes_cost();
+
+    env.budget().reset_default();
 
     println!("\n[bench_pay_per_use]");
     println!("  CPU Instructions : {}", cpu);
@@ -203,6 +229,12 @@ fn bench_pay_per_use() {
 
     assert!(cpu > 0, "pay_per_use() must consume CPU instructions");
     assert!(mem > 0, "pay_per_use() must consume memory");
+    assert!(
+        cpu <= MAX_PAY_PER_USE_INSTRUCTIONS,
+        "pay_per_use() CPU ({}) exceeds budget threshold ({})",
+        cpu,
+        MAX_PAY_PER_USE_INSTRUCTIONS
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,12 +282,14 @@ fn bench_batch_charge_10_users() {
     });
 
     // Reset budget immediately before the call under measurement.
-    env.budget().reset_default();
+    env.budget().reset_unlimited();
 
     let results = client.batch_charge(&users);
 
-    let cpu = env.budget().cpu_instruction_cost();
+    let cpu = env.budget().cpu_instruction_count();
     let mem = env.budget().memory_bytes_cost();
+
+    env.budget().reset_default();
 
     println!("\n[bench_batch_charge_10_users]");
     println!("  CPU Instructions : {}", cpu);
@@ -278,6 +312,12 @@ fn bench_batch_charge_10_users() {
 
     assert!(cpu > 0, "batch_charge() must consume CPU instructions");
     assert!(mem > 0, "batch_charge() must consume memory");
+    assert!(
+        cpu <= MAX_BATCH_10_INSTRUCTIONS,
+        "batch_charge() CPU ({}) exceeds budget threshold ({})",
+        cpu,
+        MAX_BATCH_10_INSTRUCTIONS
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
