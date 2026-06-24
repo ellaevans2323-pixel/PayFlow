@@ -801,6 +801,25 @@ fn test_zero_interval() {
     client.subscribe(&user, &merchant, &1_0000000, &0, &token_addr, &None, &None);
 }
 
+#[test]
+#[should_panic]
+fn test_interval_too_short() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    client.subscribe(&user, &merchant, &1_0000000, &59, &token_addr, &None, &None);
+}
+
+#[test]
+fn test_interval_minimum_valid() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    client.subscribe(&user, &merchant, &1_0000000, &60, &token_addr, &None, &None);
+    let sub = client.get_subscription(&user).unwrap();
+    assert_eq!(sub.interval, 60);
+}
+
 // ─────────────────────────────────────────────
 // Multi-user isolation
 // ─────────────────────────────────────────────
@@ -1423,6 +1442,19 @@ fn test_merchant_revenue_accumulates() {
 // ─────────────────────────────────────────────
 // spending_limit tests
 // ─────────────────────────────────────────────
+
+#[test]
+fn test_get_daily_limit() {
+    let (env, contract_id, _token_addr, user, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    // Initial limit should be None
+    assert_eq!(client.get_daily_limit(&user), None);
+
+    // After setting, it should return Some(limit)
+    client.set_daily_limit(&user, &10_0000000);
+    assert_eq!(client.get_daily_limit(&user), Some(10_0000000));
+}
 
 #[test]
 fn test_daily_limit_allows_spend_within_limit() {
@@ -3087,4 +3119,41 @@ fn test_withdraw_merchant_revenue_zero_balance_panics() {
 
     // No charges have occurred, so revenue is zero.
     client.withdraw_merchant_revenue(&merchant);
+#[test]
+fn test_next_charge_at_none_for_paused_subscription() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+    client.pause(&user);
+
+    assert!(client.next_charge_at(&user).is_none());
+}
+
+#[test]
+fn test_is_charge_due_transitions_after_interval() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let interval: u64 = 86400;
+    client.subscribe(&user, &merchant, &1_0000000, &interval, &token_addr, &None, &None);
+
+    // Before interval elapses: not due
+    assert!(!client.is_charge_due(&user));
+
+    env.ledger().with_mut(|l| { l.timestamp += interval; });
+    assert!(client.is_charge_due(&user));
+}
+
+#[test]
+fn test_is_charge_due_false_for_paused_subscription() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let interval: u64 = 86400;
+    client.subscribe(&user, &merchant, &1_0000000, &interval, &token_addr, &None, &None);
+    client.pause(&user);
+
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+    assert!(!client.is_charge_due(&user));
 }
