@@ -759,6 +759,25 @@ fn test_ttl_extension() {
 }
 
 #[test]
+fn test_grace_period_ttl_extension() {
+    let (env, contract_id, _token_addr, _user, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    // Ensure an admin is set so admin checks pass.
+    let admin = Address::generate(&env);
+    // Write admin as the contract to set instance storage from the test harness.
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+    });
+
+    // Set a grace period as admin and verify read returns the same value.
+    let seconds: u64 = 3600;
+    client.set_grace_period(&seconds);
+    let got = client.get_grace_period();
+    assert_eq!(got, seconds);
+}
+
+#[test]
 #[should_panic(expected = "already initialized")]
 fn test_double_initialize() {
     let (env, contract_id, token_addr, _user, _merchant) = setup();
