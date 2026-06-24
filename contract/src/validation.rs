@@ -1,3 +1,29 @@
+use soroban_sdk::{token, Address, Env};
+
+use crate::errors::ContractError;
+use crate::Subscription;
+
+/// Verifies that `user` has granted the contract an allowance of at least
+/// `min_amount` for `token`. Panics with `ContractError::InsufficientAllowance`
+/// if the check fails.
+pub fn check_allowance(env: &Env, user: &Address, token: &Address, min_amount: i128) {
+    let client = token::Client::new(env, token);
+    let allowance = client.allowance(user, &env.current_contract_address());
+    if allowance < min_amount {
+        env.panic_with_error(ContractError::InsufficientAllowance);
+    }
+}
+
+/// Composable helper that asserts a subscription is ready to be used:
+/// the subscription must be active and the user must have sufficient
+/// allowance for the subscription's token and amount.
+pub fn validate_subscription_readiness(env: &Env, user: &Address, sub: &Subscription) {
+    if !sub.active {
+        env.panic_with_error(ContractError::SubscriptionNotActive);
+    }
+    check_allowance(env, user, &sub.token, sub.amount);
+}
+
 pub fn require_positive_amount(amount: i128) {
     assert!(amount > 0, "amount must be positive");
 }

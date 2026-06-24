@@ -179,11 +179,7 @@ impl FlowPay {
             env.panic_with_error(ContractError::InvalidTokenAddress);
         }
 
-        let token_client = token::Client::new(&env, &token);
-        let allowance = token_client.allowance(&user, &env.current_contract_address());
-        if allowance < amount {
-            env.panic_with_error(ContractError::InsufficientAllowance);
-        }
+        validation::check_allowance(&env, &user, &token, amount);
 
         let now = env.ledger().timestamp();
         let trial_duration = trial_period.unwrap_or(0);
