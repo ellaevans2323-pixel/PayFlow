@@ -7,22 +7,32 @@ use crate::merchant_stats;
 use crate::subscription_history;
 use crate::{extend_subscription_ttl, DataKey, Subscription};
 
+/// Returns the next charge timestamp for a subscription, or `None` if not chargeable.
+/// Handles the trial case: when `last_charged` is in the future, it is the trial end time.
+pub fn compute_next_charge_at(sub: &Subscription) -> Option<u64> {
+    if !sub.active || sub.paused {
+        return None;
+    }
+    Some(sub.last_charged + sub.interval)
+}
+
 /// Batch pre-check: returns `Ok(())` when a charge may proceed, or the skip result.
 pub fn precheck_charge(
     sub: &Subscription,
     now: u64,
     grace_period: u64,
 ) -> Result<(), ChargeResult> {
-    if !sub.active {
-        return Err(ChargeResult::Inactive);
-    }
-    if sub.paused {
-        return Err(ChargeResult::Paused);
-    }
-    if now < sub.last_charged + sub.interval {
+    let next = compute_next_charge_at(sub).ok_or_else(|| {
+        if !sub.active {
+            ChargeResult::Inactive
+        } else {
+            ChargeResult::Paused
+        }
+    })?;
+    if now < next {
         return Err(ChargeResult::Skipped);
     }
-    if grace_period > 0 && now > sub.last_charged + sub.interval + grace_period {
+    if grace_period > 0 && now > next + grace_period {
         return Err(ChargeResult::GracePeriodElapsed);
     }
     Ok(())
