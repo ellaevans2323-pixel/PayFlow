@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useWallet } from "./hooks/useWallet";
 import { useTheme } from "./hooks/useTheme";
 import { useLocalStorage } from "./hooks/useLocalStorage";
@@ -10,12 +10,14 @@ import { useContractId } from "./hooks/useContractId";
 import { useRpcHealth } from "./hooks/useRpcHealth";
 import { useSubscriberCount } from "./hooks/useSubscriberCount";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useAnalytics } from "./hooks/useAnalytics";
 import SubscribeForm from "./components/SubscribeForm";
 import Dashboard from "./components/Dashboard";
 import MerchantDashboard from "./components/MerchantDashboard";
 import TabBar from "./components/TabBar";
 import ConnectWallet from "./components/ConnectWallet";
 import WalletBar from "./components/WalletBar";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function SunIcon() {
   return (
@@ -51,8 +53,41 @@ function HelpIcon() {
   );
 }
 
+function TabErrorFallback({ title, onRetry }: { title: string; onRetry: () => void }) {
+  return (
+    <div className="error-boundary">
+      <div className="card error-boundary__card">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="48"
+          height="48"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--color-danger)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="error-boundary__icon"
+          aria-hidden="true"
+        >
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <h2 className="text-xl font-semibold mb-2">{title} encountered an error</h2>
+        <p className="text-muted text-sm mb-6">
+          Try again to continue.
+        </p>
+        <button className="btn-primary" onClick={onRetry}>
+          Retry
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
-  const { publicKey, connect, signAndSubmit, disconnect, error } = useWallet();
+  const { publicKey, connect, signAndSubmit, disconnect, error, connecting } = useWallet();
   const { theme, toggle } = useTheme();
   const { available: freighterAvailable, installUrl } = useFreighterAvailable();
   const { networkMatch, walletNetwork } = useNetworkCheck();
@@ -64,6 +99,10 @@ export default function App() {
   const [tab, setTab] = useLocalStorage<"subscribe" | "dashboard" | "merchant">("flowpay_tab", "dashboard");
   const [refresh, setRefresh] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
+  const { isOptedIn: analyticsEnabled, setOptIn: setAnalyticsOptIn, track } = useAnalytics();
+  const subscribeErrorBoundaryRef = useRef<ErrorBoundary>(null);
+  const dashboardErrorBoundaryRef = useRef<ErrorBoundary>(null);
+  const merchantErrorBoundaryRef = useRef<ErrorBoundary>(null);
 
   // Keyboard shortcuts
   const shortcuts = useKeyboardShortcuts({
@@ -89,8 +128,31 @@ export default function App() {
         description: "Show keyboard shortcuts",
         action: () => setShowHelp((prev) => !prev),
       },
+      {
+        key: "x",
+        description: "Cancel active subscription",
+        action: () => {
+          // This shortcut is handled specifically in Dashboard.tsx
+          // where it has access to the subscription state.
+          // We include it here solely for documentation in the Help Modal.
+        },
+      },
+      {
+        key: "p",
+        description: "Focus pay-per-use amount input",
+        action: () => {
+          // This shortcut is handled specifically in Dashboard.tsx
+          // where it has access to the subscription state and input ref.
+          // We include it here solely for documentation in the Help Modal.
+        },
+      },
     ],
   });
+
+  async function handleConnectWallet() {
+    await connect();
+    track("wallet_connect");
+  }
 
   return (
     <div className={`app-shell${isMobile ? " app-shell--mobile" : ""}`}>
@@ -236,7 +298,30 @@ export default function App() {
 
       {/* Freighter installed but not connected */}
       {freighterAvailable && !publicKey && (
-        <ConnectWallet onConnect={connect} error={error} />
+        <>
+          <div className="card connect-wallet">
+            <p className="connect-wallet__hint">
+              Help improve FlowPay with optional anonymous usage analytics.
+            </p>
+            <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+              <button
+                className={`btn-secondary${analyticsEnabled ? " active" : ""}`}
+                onClick={() => setAnalyticsOptIn(true)}
+                type="button"
+              >
+                Opt in
+              </button>
+              <button
+                className={`btn-secondary${!analyticsEnabled ? " active" : ""}`}
+                onClick={() => setAnalyticsOptIn(false)}
+                type="button"
+              >
+                Keep disabled
+              </button>
+            </div>
+          </div>
+          <ConnectWallet onConnect={handleConnectWallet} error={error} loading={connecting} />
+        </>
       )}
 
       {/* Connected */}
@@ -254,27 +339,61 @@ export default function App() {
           {/* Content */}
           <div className="card">
             {tab === "subscribe" ? (
-              <SubscribeForm
-                userKey={publicKey}
-                onSign={signAndSubmit}
-                onSuccess={() => {
-                  setTab("dashboard");
-                  setRefresh((r) => r + 1);
-                }}
-                announce={announce}
-              />
+              <ErrorBoundary
+                ref={subscribeErrorBoundaryRef}
+                fallback={
+                  <TabErrorFallback
+                    title="Subscribe Form"
+                    onRetry={() => subscribeErrorBoundaryRef.current?.reset()}
+                  />
+                }
+              >
+                <SubscribeForm
+                  userKey={publicKey}
+                  onSign={signAndSubmit}
+                  onSubscribed={() => track("subscribe")}
+                  onSuccess={() => {
+                    setTab("dashboard");
+                    setRefresh((r) => r + 1);
+                  }}
+                  announce={announce}
+                />
+              </ErrorBoundary>
             ) : tab === "merchant" ? (
-              <MerchantDashboard
-                merchantKey={publicKey}
-                refreshTrigger={refresh}
-              />
+              <ErrorBoundary
+                ref={merchantErrorBoundaryRef}
+                fallback={
+                  <TabErrorFallback
+                    title="Merchant Dashboard"
+                    onRetry={() => merchantErrorBoundaryRef.current?.reset()}
+                  />
+                }
+              >
+                <MerchantDashboard
+                  merchantKey={publicKey}
+                  onSign={signAndSubmit}
+                  refreshTrigger={refresh}
+                />
+              </ErrorBoundary>
             ) : (
-              <Dashboard
-                userKey={publicKey}
-                onSign={signAndSubmit}
-                refreshTrigger={refresh}
-                announce={announce}
-              />
+              <ErrorBoundary
+                ref={dashboardErrorBoundaryRef}
+                fallback={
+                  <TabErrorFallback
+                    title="Dashboard"
+                    onRetry={() => dashboardErrorBoundaryRef.current?.reset()}
+                  />
+                }
+              >
+                <Dashboard
+                  userKey={publicKey}
+                  onSign={signAndSubmit}
+                  refreshTrigger={refresh}
+                  announce={announce}
+                  onCancelled={() => track("cancel")}
+                  onPayPerUse={(amount) => track("pay_per_use", { amount: amount.toString() })}
+                />
+              </ErrorBoundary>
             )}
           </div>
         </>

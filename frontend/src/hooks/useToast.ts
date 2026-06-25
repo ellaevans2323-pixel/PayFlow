@@ -6,6 +6,7 @@ export interface Toast {
   id: number;
   message: string;
   variant: ToastVariant;
+  txHash?: string;
 }
 
 let nextId = 0;
@@ -13,11 +14,14 @@ let nextId = 0;
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, variant: ToastVariant = "info") => {
-    const id = ++nextId;
-    setToasts((prev) => [...prev, { id, message, variant }]);
-    setTimeout(() => removeToast(id), 5000);
-  }, []);
+  const addToast = useCallback(
+    (message: string, variant: ToastVariant = "info", txHash?: string) => {
+      const id = ++nextId;
+      setToasts((prev) => [...prev, { id, message, variant, txHash }]);
+      setTimeout(() => removeToast(id), 5000);
+    },
+    []
+  );
 
   const removeToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));

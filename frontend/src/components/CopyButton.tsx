@@ -4,6 +4,7 @@ import { useClipboard } from "../hooks/useClipboard";
 
 interface Props {
   text: string;
+  ariaLabel?: string;
 }
 
 function CopyIcon() {
@@ -23,12 +24,27 @@ function CheckIcon() {
   );
 }
 
-export default function CopyButton({ text }: Props) {
-  const { copied, copy } = useClipboard();
+function ErrorIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+export default function CopyButton({ text, ariaLabel = "Copy address" }: Props) {
+  const { copied, error, copy } = useClipboard();
 
   return (
-    <button className="btn-secondary copy-btn" onClick={() => copy(text)} title="Copy to clipboard" aria-label="Copy address">
-      {copied ? <CheckIcon /> : <CopyIcon />}
+    <button
+      className="btn-secondary copy-btn"
+      onClick={() => copy(text)}
+      title={copied ? "Copied!" : error ? "Copy failed" : "Copy to clipboard"}
+      aria-label={ariaLabel}
+    >
+      {error ? <ErrorIcon /> : copied ? <CheckIcon /> : <CopyIcon />}
     </button>
   );
 }

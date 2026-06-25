@@ -949,7 +949,9 @@
                 "symbol": "migrate"
               }
             ],
-            "data": "void"
+            "data": {
+              "vec": []
+            }
           }
         }
       },

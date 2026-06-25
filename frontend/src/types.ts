@@ -4,6 +4,8 @@ export interface Subscription {
   interval: number;
   last_charged: number;
   active: boolean;
+  paused: boolean;
+  trial_duration?: number;
   label?: string;
 }
 

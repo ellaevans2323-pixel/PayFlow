@@ -18,6 +18,10 @@ pub fn set_token(env: &Env, token: &Address) {
     env.storage().instance().set(&DataKey::Token, token);
 }
 
+pub fn get_token(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::Token)
+}
+
 pub fn get_admin(env: &Env) -> Address {
     env.storage()
         .instance()
@@ -25,6 +29,21 @@ pub fn get_admin(env: &Env) -> Address {
         .expect("admin not set")
 }
 
+pub fn get_admin_optional(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::Admin)
+}
+
 pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
+}
+
+pub fn is_contract_paused(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get(&DataKey::ContractPaused)
+        .unwrap_or(false)
+}
+
+pub fn set_contract_paused(env: &Env, paused: bool) {
+    env.storage().instance().set(&DataKey::ContractPaused, &paused);
 }

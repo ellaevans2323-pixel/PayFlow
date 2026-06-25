@@ -23,6 +23,16 @@ pub fn set_daily_limit(env: &Env, user: &Address, limit: i128) {
         .extend_ttl(&key, LEDGERS_PER_DAY, LEDGERS_PER_DAY);
 }
 
+/// Removes the daily spending limit for a user.
+pub fn remove_daily_limit(env: &Env, user: &Address) {
+    env.storage()
+        .temporary()
+        .remove(&DataKey::DailyLimit(user.clone()));
+    env.storage()
+        .temporary()
+        .remove(&DataKey::DailySpent(user.clone()));
+}
+
 /// Returns how much the user has spent today, defaulting to 0.
 pub fn get_daily_spent(env: &Env, user: &Address) -> i128 {
     env.storage()
@@ -47,9 +57,6 @@ pub fn record_spend(env: &Env, user: &Address, amount: i128) {
 pub fn enforce_limit(env: &Env, user: &Address, amount: i128) {
     if let Some(limit) = get_daily_limit(env, user) {
         let spent = get_daily_spent(env, user);
-        assert!(
-            spent + amount <= limit,
-            "daily spending limit exceeded"
-        );
+        assert!(spent + amount <= limit, "daily spending limit exceeded");
     }
 }

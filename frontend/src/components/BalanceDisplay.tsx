@@ -3,10 +3,10 @@ import { getBalance } from "../stellar";
 import { formatXlm } from "../utils/format";
 
 interface BalanceDisplayProps {
-  publicKey: string;
+  address: string;
 }
 
-export default function BalanceDisplay({ publicKey }: BalanceDisplayProps) {
+export default function BalanceDisplay({ address }: BalanceDisplayProps) {
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -16,7 +16,7 @@ export default function BalanceDisplay({ publicKey }: BalanceDisplayProps) {
     async function fetchBalance() {
       setLoading(true);
       try {
-        const bal = await getBalance(publicKey);
+        const bal = await getBalance(address);
         if (mounted) {
           setBalance(bal);
         }
@@ -34,7 +34,7 @@ export default function BalanceDisplay({ publicKey }: BalanceDisplayProps) {
     return () => {
       mounted = false;
     };
-  }, [publicKey]);
+  }, [address]);
 
   if (loading) {
     return <div className="skeleton balance-skeleton" />;

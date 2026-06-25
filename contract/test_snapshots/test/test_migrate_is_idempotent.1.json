@@ -902,7 +902,9 @@
                 "symbol": "migrate"
               }
             ],
-            "data": "void"
+            "data": {
+              "vec": []
+            }
           }
         }
       },
@@ -947,7 +949,9 @@
                 "symbol": "migrate"
               }
             ],
-            "data": "void"
+            "data": {
+              "vec": []
+            }
           }
         }
       },

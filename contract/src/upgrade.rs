@@ -1,27 +1,13 @@
-use soroban_sdk::{Address, Env};
+use soroban_sdk::{BytesN, Env};
 
-use crate::{DataKey, Subscription};
+use crate::{admin, events};
 
-pub fn has_token(env: &Env) -> bool {
-    env.storage().instance().has(&DataKey::Token)
-}
+pub fn upgrade(env: &Env, new_wasm_hash: BytesN<32>) {
+    admin::require_admin(env);
 
-pub fn set_token(env: &Env, token: &Address) {
-    env.storage().instance().set(&DataKey::Token, token);
-}
+    #[cfg(not(test))]
+    env.deployer()
+        .update_current_contract_wasm(new_wasm_hash.clone());
 
-pub fn get_token(env: &Env) -> Option<Address> {
-    env.storage().instance().get(&DataKey::Token)
-}
-
-pub fn set_subscription(env: &Env, user: &Address, sub: &Subscription) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::Subscription(user.clone()), sub);
-}
-
-pub fn get_subscription(env: &Env, user: &Address) -> Option<Subscription> {
-    env.storage()
-        .persistent()
-        .get(&DataKey::Subscription(user.clone()))
+    events::publish_upgraded(env, &new_wasm_hash);
 }

@@ -1,12 +1,14 @@
 import React from "react";
 import { useFreighterAvailable } from "../hooks/useFreighterAvailable";
+import Spinner from "./Spinner";
 
 interface Props {
   onConnect: () => void;
   error: string | null;
+  loading?: boolean;
 }
 
-export default function ConnectWallet({ onConnect, error }: Props) {
+export default function ConnectWallet({ onConnect, error, loading = false }: Props) {
   const { available, installUrl } = useFreighterAvailable();
 
   return (
@@ -14,8 +16,8 @@ export default function ConnectWallet({ onConnect, error }: Props) {
       <p className="connect-wallet__hint">Connect your Freighter wallet to get started.</p>
 
       {available ? (
-        <button onClick={onConnect} className="btn-primary w-full">
-          Connect Wallet
+        <button onClick={onConnect} className="btn-primary w-full" disabled={loading}>
+          {loading ? <Spinner size="sm" /> : "Connect Wallet"}
         </button>
       ) : (
         <a

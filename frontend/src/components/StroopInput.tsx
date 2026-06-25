@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { STROOPS_PER_XLM } from "../constants";
+import { useDebounce } from "../hooks/useDebounce";
 
 interface Props {
   label: string;
@@ -19,11 +20,23 @@ function validate(raw: string): { stroops: bigint | null; error: string | null }
 export default function StroopInput({ label, onChange, disabled }: Props) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const debouncedValue = useDebounce(value, 300);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;
     setValue(raw);
-    const { stroops, error: err } = validate(raw);
+    // validation is debounced to avoid firing on every keystroke
+  }
+
+  useEffect(() => {
+    const { stroops, error: err } = validate(debouncedValue);
+    setError(err);
+    onChange(stroops);
+  }, [debouncedValue]);
+
+  function handleBlur() {
+    // validate immediately on blur
+    const { stroops, error: err } = validate(value);
     setError(err);
     onChange(stroops);
   }
@@ -41,6 +54,7 @@ export default function StroopInput({ label, onChange, disabled }: Props) {
         placeholder="5"
         value={value}
         onChange={handleChange}
+        onBlur={handleBlur}
         disabled={disabled}
         required
       />

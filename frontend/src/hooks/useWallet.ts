@@ -20,6 +20,7 @@ declare global {
 export function useWallet() {
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   const connect = useCallback(async () => {
     setError(null);
@@ -27,6 +28,7 @@ export function useWallet() {
       setError("Freighter wallet not found. Install it from freighter.app");
       return;
     }
+    setConnecting(true);
     try {
       const connected = await window.freighter.isConnected();
       if (!connected) {
@@ -37,6 +39,8 @@ export function useWallet() {
       setPublicKey(key);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to connect wallet");
+    } finally {
+      setConnecting(false);
     }
   }, []);
 
@@ -55,5 +59,5 @@ export function useWallet() {
     setError(null);
   }, []);
 
-  return { publicKey, connect, signAndSubmit, disconnect, error };
+  return { publicKey, connect, signAndSubmit, disconnect, error, connecting };
 }

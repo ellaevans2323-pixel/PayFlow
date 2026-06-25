@@ -33,3 +33,40 @@ pub fn record_charge(env: &Env, user: &Address, timestamp: u64) {
         .persistent()
         .set(&DataKey::ChargeHistory(user.clone()), &history);
 }
+
+/// Clears the stored charge history for a subscriber.
+pub fn clear_charge_history(env: &Env, user: &Address) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::ChargeHistory(user.clone()));
+}
+
+/// Returns a paginated slice of charge timestamps for a subscriber.
+/// `limit` is capped at 12.
+pub fn get_charge_history_page(env: &Env, user: &Address, offset: u32, limit: u32) -> Vec<u64> {
+    let history = get_charge_history(env, user);
+    let mut page = Vec::new(env);
+
+    let effective_limit = if limit > MAX_HISTORY {
+        MAX_HISTORY
+    } else {
+        limit
+    };
+
+    let total = history.len();
+    if offset >= total {
+        return page;
+    }
+
+    let end = if offset + effective_limit > total {
+        total
+    } else {
+        offset + effective_limit
+    };
+
+    for i in offset..end {
+        page.push_back(history.get(i).unwrap());
+    }
+
+    page
+}

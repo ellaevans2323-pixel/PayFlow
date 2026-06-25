@@ -1,8 +1,8 @@
 use soroban_sdk::{contracttype, Address, Env, Vec};
 
-use crate::{grace, token, DataKey, Subscription};
-use crate::events;
-use crate::merchant_stats;
+use crate::charge_exec;
+use crate::grace;
+use crate::{DataKey, Subscription};
 
 /// The outcome for a single user in a batch_charge call.
 #[contracttype]
@@ -39,36 +39,13 @@ pub fn batch_charge(env: &Env, users: Vec<Address>) -> Vec<ChargeResult> {
 
         let result = match sub_opt {
             None => ChargeResult::NoSubscription,
-            Some(mut sub) => {
-                if !sub.active {
-                    ChargeResult::Inactive
-                } else if sub.paused {
-                    ChargeResult::Paused
-                } else if now < sub.last_charged + sub.interval {
-                    ChargeResult::Skipped
-                } else if grace_period > 0
-                    && now > sub.last_charged + sub.interval + grace_period
-                {
-                    ChargeResult::GracePeriodElapsed
-                } else {
-                    let token_client = token::Client::new(env, &sub.token);
-                    token_client.transfer_from(
-                        &env.current_contract_address(),
-                        &user,
-                        &sub.merchant,
-                        &sub.amount,
-                    );
-
-                    merchant_stats::increment_revenue(env, &sub.merchant, sub.amount);
-
-                    sub.last_charged = now;
-                    env.storage().persistent().set(&key, &sub);
-
-                    events::publish_charged(env, &user, &sub, now);
-
+            Some(mut sub) => match charge_exec::precheck_charge(&sub, now, grace_period) {
+                Err(skip) => skip,
+                Ok(()) => {
+                    charge_exec::execute_charge(env, &user, &key, &mut sub, now);
                     ChargeResult::Charged
                 }
-            }
+            },
         };
 
         results.push_back(result);

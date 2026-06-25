@@ -7,7 +7,7 @@ export interface UseTransactionResult {
   status: TxStatus;
   hash: string | null;
   error: string | null;
-  submit: (buildAndSign: () => Promise<string>) => Promise<string | null>;
+  submit: (buildAndSign: () => Promise<string>) => Promise<string>;
 }
 
 const POLL_INTERVAL_MS = 2000;
@@ -19,7 +19,7 @@ export function useTransaction(): UseTransactionResult {
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const submit = useCallback(async (buildAndSign: () => Promise<string>): Promise<string | null> => {
+  const submit = useCallback(async (buildAndSign: () => Promise<string>): Promise<string> => {
     setStatus("pending");
     setHash(null);
     setError(null);
@@ -31,7 +31,7 @@ export function useTransaction(): UseTransactionResult {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       setStatus("failed");
-      return null;
+      throw e;
     }
 
     setHash(txHash);

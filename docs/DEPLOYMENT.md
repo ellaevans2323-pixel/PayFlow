@@ -62,3 +62,22 @@ soroban contract invoke \
 - `migrate()` checks the current version and applies any pending upgrades sequentially.
 - Subsequent calls to `migrate()` are no-ops once the contract is at the latest version.
 - Future schema changes should add a new `if version < N { ... }` block in `migration.rs`.
+
+## Contract Upgrade (WASM)
+
+FlowPay exposes an `upgrade()` entrypoint which allows the admin to point the deployed
+contract to a new WASM hash. Only the configured admin can call this endpoint.
+
+Example (using the soroban CLI, run from the deployer account):
+
+```bash
+soroban contract invoke \
+  --id <CONTRACT_ID> \
+  --source deployer \
+  --network testnet \
+  -- upgrade <NEW_WASM_HASH>
+```
+
+The runtime will record an `upgraded` event after a successful change. Note that
+if the new WASM requires a storage migration, you should call `migrate()` once
+after upgrading.

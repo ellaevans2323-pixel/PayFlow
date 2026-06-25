@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { getChargeHistory } from "../stellar";
+import React, { useMemo } from "react";
+import { useContractEvents } from "../hooks/useContractEvents";
 import { ChargeEvent } from "../types";
 import { STROOPS_PER_XLM } from "../constants";
 import Spinner from "./Spinner";
@@ -27,27 +27,75 @@ function truncateHash(hash: string): string {
   return `${hash.slice(0, 6)}…${hash.slice(-4)}`;
 }
 
+// ─── CSV export helper ────────────────────────────────────────────────────────
+
+/** Wrap a cell value in double-quotes and escape any internal quotes. */
+function csvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Build a CSV string from charge events and trigger a browser download.
+ * Columns: Date, Amount (XLM), TX Hash, Merchant
+ */
+function exportToCsv(events: ChargeEvent[]): void {
+  const header = ["Date", "Amount (XLM)", "TX Hash", "Merchant"].map(csvCell).join(",");
+
+  const rows = events.map((event) => {
+    const date = event.date.toISOString().slice(0, 10); // YYYY-MM-DD, locale-independent
+    const xlm = (Number(event.amount) / STROOPS_PER_XLM).toFixed(7);
+    return [date, xlm, event.txHash, event.merchant].map(csvCell).join(",");
+  });
+
+  const csv = [header, ...rows].join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `payflow-charge-history-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+
+  // Clean up the object URL after the download is triggered
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function SubscriptionHistory({ userKey }: Props) {
-  const [events, setEvents] = useState<ChargeEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { events: contractEvents, loading, error, refresh } = useContractEvents("charged", userKey);
 
-  const fetchHistory = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getChargeHistory(userKey);
-      setEvents(data);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [userKey]);
+  // Transform ContractEvent[] to ChargeEvent[]
+  const events = useMemo<ChargeEvent[]>(() => {
+    return contractEvents
+      .map((event) => {
+        let merchant = "";
+        let amount = "0";
+        let timestamp = 0;
 
-  useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+        try {
+          const val = event.data as any;
+          if (val?._value?.merchant) merchant = val._value.merchant.toString();
+          if (val?._value?.amount) amount = val._value.amount.toString();
+          if (val?._value?.charged_at) timestamp = Number(val._value.charged_at);
+          
+          // Fallback to event timestamp if charged_at is not available
+          if (timestamp === 0 && event.timestamp) {
+            timestamp = Math.floor(new Date(event.timestamp).getTime() / 1000);
+          }
+        } catch (e) {
+          console.warn("Charge event parsing failed:", e);
+        }
+
+        return {
+          date: new Date(timestamp * 1000),
+          amount,
+          txHash: event.txHash,
+          merchant,
+        };
+      })
+      .sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [contractEvents]);
 
   if (loading) {
     return (
@@ -68,7 +116,7 @@ export default function SubscriptionHistory({ userKey }: Props) {
           <p style={{ color: "var(--color-danger)", marginBottom: "var(--space-3)" }}>
             Unable to load charge history.
           </p>
-          <button onClick={fetchHistory} className="btn-primary">
+          <button onClick={refresh} className="btn-primary">
             Retry
           </button>
         </div>
@@ -89,7 +137,29 @@ export default function SubscriptionHistory({ userKey }: Props) {
 
   return (
     <div className="card">
-      <h3 className="subscription-card__title">Charge History</h3>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "var(--space-2)",
+        }}
+      >
+        <h3 className="subscription-card__title" style={{ margin: 0 }}>
+          Charge History
+        </h3>
+        {/* #271 — Export CSV button; disabled when no events */}
+        <button
+          className="btn-secondary"
+          onClick={() => exportToCsv(events)}
+          disabled={events.length === 0}
+          aria-label="Export charge history as CSV"
+          title="Download charge history as a CSV file"
+        >
+          Export CSV
+        </button>
+      </div>
+
       <div className="charge-history-list" role="list">
         {events.map((event, index) => (
           <div

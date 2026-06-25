@@ -42,7 +42,8 @@ export default function NextChargeCountdown({ nextChargeTimestamp }: Props) {
             setCountdown(computeCountdown(nextChargeTimestamp));
         }, 60_000);
 
-        return () => clearInterval(id);
+        const exactDate = new Date(nextChargeTimestamp * 1000).toLocaleString();
+    return () => clearInterval(id);
     }, [nextChargeTimestamp]);
 
     if (countdown.overdue) {
@@ -50,8 +51,9 @@ export default function NextChargeCountdown({ nextChargeTimestamp }: Props) {
     }
 
     const { days, hours, minutes } = countdown;
+    const exactDate = new Date(nextChargeTimestamp * 1000).toLocaleString();
     return (
-        <span className="text-mono">
+        <span className="text-mono" title={exactDate}>
             {days}d {hours}h {minutes}m
         </span>
     );

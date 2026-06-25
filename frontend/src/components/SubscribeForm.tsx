@@ -1,26 +1,39 @@
-import React, { useState } from "react";
-import { buildSubscribeTx } from "../stellar";
+import React, { useMemo, useState } from "react";
+import { StrKey } from "@stellar/stellar-sdk";
+import { buildSubscribeTx, DEFAULT_TOKEN } from "../stellar";
 import { friendlyError } from "../utils/errors";
-import { STROOPS_PER_XLM, BILLING_INTERVALS } from "../constants";
+import { STROOPS_PER_XLM, BILLING_INTERVALS } from "../constants"; // BILLING_INTERVALS used for initial value
 import { useFormValidation } from "../hooks/useFormValidation";
 import { useToast } from "../hooks/useToast";
 import { useTransaction } from "../hooks/useTransaction";
+import BalanceDisplay from "./BalanceDisplay";
+import AllowanceDisplay from "./AllowanceDisplay";
 import ToastContainer from "./Toast";
+import IntervalSelector from "./IntervalSelector";
 
 interface Props {
   userKey: string;
   onSign: (xdr: string) => Promise<string>;
   onSuccess: () => void;
   announce: (message: string) => void;
+  onSubscribed?: () => void;
 }
 
-export default function SubscribeForm({ userKey, onSign, onSuccess, announce }: Props) {
+export default function SubscribeForm({ userKey, onSign, onSuccess, announce, onSubscribed }: Props) {
   const [merchant, setMerchant] = useState("");
   const [amount, setAmount] = useState("");
   const [interval, setInterval] = useState(BILLING_INTERVALS[2].value);
   const { errors, validate } = useFormValidation();
   const { toasts, addToast, removeToast } = useToast();
   const tx = useTransaction();
+
+  function validateReferrer(value: string): string | null {
+    if (!value) return null; // Optional field
+    if (!StrKey.isValidEd25519PublicKey(value)) {
+      return "Invalid Stellar address format";
+    }
+    return null;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,13 +42,14 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce }: 
     announce("Transaction submitted");
     const hash = await tx.submit(async () => {
       const stroops = BigInt(Math.round(parseFloat(amount) * STROOPS_PER_XLM));
-      const xdr = await buildSubscribeTx(userKey, merchant, stroops, BigInt(interval));
+      const xdr = await buildSubscribeTx(userKey, merchant, stroops, BigInt(interval), DEFAULT_TOKEN, null, "");
       return onSign(xdr);
     });
 
     if (hash) {
-      addToast(`Subscribed! tx: ${hash.slice(0, 12)}…`, "success");
+      addToast("Subscribed!", "success", hash);
       announce("Transaction confirmed");
+      onSubscribed?.();
       onSuccess();
     } else if (tx.error) {
       const msg = `Error: ${friendlyError(tx.error)}`;
@@ -43,6 +57,12 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce }: 
       announce(msg);
     }
   }
+
+  const amountStroops = useMemo(() => {
+    const parsed = parseFloat(amount);
+    if (!amount || Number.isNaN(parsed) || parsed <= 0) return 0n;
+    return BigInt(Math.round(parsed * STROOPS_PER_XLM));
+  }, [amount]);
 
   const pending = tx.status === "pending";
 
@@ -61,6 +81,8 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce }: 
         {errors.merchant && <span className="text-error">{errors.merchant}</span>}
       </label>
 
+      <BalanceDisplay address={userKey} />
+
       <label className="form-group">
         <span className="form-label">Amount (XLM per period)</span>
         <input
@@ -73,19 +95,18 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce }: 
           required
         />
         {errors.amount && <span className="text-error">{errors.amount}</span>}
+        {userKey && (
+          <AllowanceDisplay
+            userKey={userKey}
+            subscriptionAmount={amountStroops}
+            refreshTrigger={0}
+          />
+        )}
       </label>
 
-      <label className="form-group">
-        <span className="form-label">Billing interval</span>
-        <select value={interval} onChange={(e) => setInterval(Number(e.target.value))}>
-          {BILLING_INTERVALS.map((i) => (
-            <option key={i.value} value={i.value}>
-              {i.label}
-            </option>
-          ))}
-        </select>
-        {errors.interval && <span className="text-error">{errors.interval}</span>}
-      </label>
+      {/* #278 — Use dedicated IntervalSelector instead of inline <select> */}
+      <IntervalSelector value={interval} onChange={setInterval} />
+      {errors.interval && <span className="text-error">{errors.interval}</span>}
 
       <button type="submit" disabled={pending} className="btn-primary subscribe-form__submit">
         {pending ? "Confirming…" : "Subscribe"}
