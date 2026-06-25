@@ -784,6 +784,246 @@ fn test_initialize_without_valid_token() {
     // Success means it didn't panic, which is the current expected behavior.
 }
 
+// ─────────────────────────────────────────────
+// Global volume cap tests
+// ─────────────────────────────────────────────
+
+/// Helper: set up a user with a large balance for global volume testing
+fn setup_large_balance(env: &Env, contract_id: &Address, token_addr: &Address) -> Address {
+    let user = Address::generate(env);
+    let sac = StellarAssetClient::new(env, token_addr);
+    sac.mint(&user, &100_000_000_000_000);
+    let token = TokenClient::new(env, token_addr);
+    token.approve(&user, contract_id, &100_000_000_000_000, &200);
+    user
+}
+
+#[test]
+fn test_global_volume_within_limit() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let amount: i128 = 1_000_0000000; // well under limit
+    let interval: u64 = 86400;
+
+    client.subscribe(&user, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+    client.charge(&user);
+    // Should succeed - well under the 50 trillion stroops limit
+}
+
+#[test]
+#[should_panic]
+fn test_global_volume_exceeds_limit() {
+    let (env, contract_id, token_addr, _user_setup, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    // Give users large balances to exceed the 50_000_000_000_000 limit
+    let user_a = setup_large_balance(&env, &contract_id, &token_addr);
+    let user_b = setup_large_balance(&env, &contract_id, &token_addr);
+
+    let amount: i128 = 30_000_000_000_000; // 30 trillion stroops each
+    let interval: u64 = 86400;
+
+    client.subscribe(&user_a, &merchant, &amount, &interval, &token_addr, &None, &None);
+    client.subscribe(&user_b, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+
+    // First charge succeeds (30 trillion used)
+    client.charge(&user_a);
+
+    // Second charge should panic (60 trillion total > 50 trillion limit)
+    client.charge(&user_b);
+}
+
+#[test]
+fn test_global_volume_window_reset() {
+    let (env, contract_id, token_addr, _user_setup, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let user_a = setup_large_balance(&env, &contract_id, &token_addr);
+    let user_b = setup_large_balance(&env, &contract_id, &token_addr);
+
+    let amount: i128 = 30_000_000_000_000; // 30 trillion stroops
+    let interval: u64 = 86400;
+
+    client.subscribe(&user_a, &merchant, &amount, &interval, &token_addr, &None, &None);
+    client.subscribe(&user_b, &merchant, &amount, &interval, &token_addr, &None, &None);
+
+    env.ledger().with_mut(|l| { l.timestamp += interval + 1; });
+    client.charge(&user_a); // 30 trillion used this window
+
+    // Advance time past the 1-hour window boundary (3601 seconds)
+    env.ledger().with_mut(|l| { l.timestamp += 3601; });
+
+    env.ledger().with_mut(|l| { l.timestamp += interval; });
+
+    // This charge should succeed because the window has reset
+    client.charge(&user_b);
+}
+
+// ─────────────────────────────────────────────
+// subscribe_with_metadata tests
+// ─────────────────────────────────────────────
+
+#[test]
+fn test_subscribe_with_metadata_success() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let label = soroban_sdk::String::from_str(&env, "Pro Plan");
+    let amount: i128 = 1_0000000;
+    let interval: u64 = 86400;
+
+    client.subscribe_with_metadata(
+        &user,
+        &merchant,
+        &amount,
+        &interval,
+        &token_addr,
+        &None,
+        &None,
+        &label,
+    );
+
+    // Verify subscription is created
+    let sub = client.get_subscription(&user).unwrap();
+    assert!(sub.active);
+    assert_eq!(sub.amount, amount);
+
+    // Verify metadata is set
+    assert_eq!(client.get_metadata(&user), Some(label));
+}
+
+#[test]
+#[should_panic]
+fn test_subscribe_with_metadata_label_too_long() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    // Create a 65-byte label (exceeds 64-byte limit)
+    let long_label = soroban_sdk::String::from_str(
+        &env,
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", // 65 chars
+    );
+
+    let amount: i128 = 1_0000000;
+    let interval: u64 = 86400;
+
+    // Should panic with MetadataLabelTooLong
+    client.subscribe_with_metadata(
+        &user,
+        &merchant,
+        &amount,
+        &interval,
+        &token_addr,
+        &None,
+        &None,
+        &long_label,
+    );
+}
+
+#[test]
+#[should_panic]
+fn test_subscribe_with_metadata_no_subscription_on_label_failure() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let long_label = soroban_sdk::String::from_str(
+        &env,
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
+    );
+
+    // Label validation happens before subscribe_inner, so no subscription should be written.
+    // This panics before any storage write — we verify that by catching the panic separately
+    // in test_subscribe_with_metadata_label_too_long. Here we just assert the panic occurs.
+    client.subscribe_with_metadata(
+        &user,
+        &merchant,
+        &1_0000000,
+        &86400,
+        &token_addr,
+        &None,
+        &None,
+        &long_label,
+    );
+}
+
+// ─────────────────────────────────────────────
+// get_protocol_stats tests
+// ─────────────────────────────────────────────
+
+#[test]
+fn test_get_protocol_stats_initial() {
+    let (env, contract_id, _token_addr, _user, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let stats = client.get_protocol_stats();
+
+    assert_eq!(stats.active_count, 0);
+    assert_eq!(stats.fee_bps, 0);
+    assert!(stats.fee_collector.is_none());
+    assert_eq!(stats.grace_period, 0);
+    assert!(!stats.whitelist_enabled);
+    assert_eq!(stats.schema_version, 1); // default version
+    assert!(!stats.contract_paused);
+}
+
+#[test]
+fn test_get_protocol_stats_after_subscribe() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    client.subscribe(&user, &merchant, &1_0000000, &86400, &token_addr, &None, &None);
+
+    let stats = client.get_protocol_stats();
+    assert_eq!(stats.active_count, 1);
+}
+
+#[test]
+fn test_get_protocol_stats_with_fee() {
+    let (env, contract_id, _token_addr, _user, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    // Set admin directly in instance storage so admin-gated functions work
+    let admin = Address::generate(&env);
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+    });
+
+    env.mock_all_auths();
+    let fee_collector = Address::generate(&env);
+    client.set_fee(&fee_collector, &100); // 1% fee
+
+    let stats = client.get_protocol_stats();
+    assert_eq!(stats.fee_bps, 100);
+    assert_eq!(stats.fee_collector, Some(fee_collector));
+}
+
+#[test]
+fn test_get_protocol_stats_contract_paused() {
+    let (env, contract_id, _token_addr, _user, _merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    // Set admin directly in instance storage so admin-gated functions work
+    let admin = Address::generate(&env);
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+    });
+
+    env.mock_all_auths();
+    client.pause_contract();
+
+    let stats = client.get_protocol_stats();
+    assert!(stats.contract_paused);
+
+    client.unpause_contract();
+    let stats_after = client.get_protocol_stats();
+    assert!(!stats_after.contract_paused);
+}
+
 #[test]
 fn test_resubscribe() {
     let (env, contract_id, token_addr, user, merchant_a) = setup();

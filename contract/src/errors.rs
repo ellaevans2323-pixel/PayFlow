@@ -14,4 +14,7 @@ pub enum ContractError {
     InsufficientAllowance = 8,
     GracePeriodElapsed = 9,
     MerchantNotWhitelisted = 10,
+    GlobalVolumeExceeded = 28,
+    MetadataLabelTooLong = 29,
+    ContractPausedError = 30,
 }
