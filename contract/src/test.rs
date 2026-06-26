@@ -614,6 +614,29 @@ fn test_cancel() {
 }
 
 #[test]
+fn test_referral_cleared_on_cancel() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let referrer = Address::generate(&env);
+
+    client.subscribe(
+        &user,
+        &merchant,
+        &1_0000000,
+        &86400,
+        &token_addr,
+        &None,
+        &Some(referrer.clone()),
+    );
+    assert_eq!(client.get_referrer(&user), Some(referrer));
+
+    client.cancel(&user);
+
+    assert_eq!(client.get_referrer(&user), None);
+}
+
+#[test]
 #[should_panic]
 fn test_charge_too_early() {
     let (env, contract_id, token_addr, user, merchant) = setup();
@@ -1983,6 +2006,27 @@ fn test_referral_clears_on_resubscribe_with_none() {
         &None,
     );
     assert!(client.get_referrer(&user).is_none());
+}
+
+#[test]
+fn test_self_referral_rejected_via_try_subscribe() {
+    let (env, contract_id, token_addr, user, merchant) = setup();
+    let client = FlowPayClient::new(&env, &contract_id);
+
+    let result = client.try_subscribe(
+        &user,
+        &merchant,
+        &1_0000000,
+        &86400,
+        &token_addr,
+        &None,
+        &Some(user.clone()),
+    );
+
+    assert_eq!(
+        result,
+        Err(Ok(soroban_sdk::Error::from_contract_error(11)))
+    );
 }
 
 // ─────────────────────────────────────────────
