@@ -504,6 +504,7 @@ impl FlowPay {
 
         subscription_count::decrement(&env);
         merchant_stats::decrement_subscriber_count(&env, &sub.merchant);
+        referral::remove_referral(&env, &user);
         events::publish_cancelled(&env, &user);
     }
 
