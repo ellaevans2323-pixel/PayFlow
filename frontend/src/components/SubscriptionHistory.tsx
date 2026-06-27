@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useContractEvents } from "../hooks/useContractEvents";
 import { ChargeEvent } from "../types";
 import { STROOPS_PER_XLM } from "../constants";
@@ -8,6 +8,9 @@ import CopyButton from "./CopyButton";
 interface Props {
   userKey: string;
 }
+
+/** Number of charge events shown per page. */
+const PAGE_SIZE = 20;
 
 function formatAmount(stroops: string): string {
   const xlm = Number(stroops) / STROOPS_PER_XLM;
@@ -65,9 +68,15 @@ function exportToCsv(events: ChargeEvent[]): void {
 export default function SubscriptionHistory({ userKey }: Props) {
   const { events: contractEvents, loading, error, refresh, loadMore, hasMore } = useContractEvents("charged", userKey);
 
-  // Transform ContractEvent[] to ChargeEvent[]
-  const events = useMemo<ChargeEvent[]>(() => {
-    return contractEvents
+  // Cache of the last successfully fetched events for stale-while-revalidate.
+  const cachedEventsRef = useRef<ChargeEvent[]>([]);
+
+  // Client-side pagination state.
+  const [page, setPage] = useState(1);
+
+  // Memoize the sorted event array — re-sorts only when the raw array reference changes.
+  const allEvents = useMemo<ChargeEvent[]>(() => {
+    const transformed = contractEvents
       .map((event) => {
         let merchant = "";
         let amount = "0";
@@ -78,7 +87,7 @@ export default function SubscriptionHistory({ userKey }: Props) {
           if (val?._value?.merchant) merchant = val._value.merchant.toString();
           if (val?._value?.amount) amount = val._value.amount.toString();
           if (val?._value?.charged_at) timestamp = Number(val._value.charged_at);
-          
+
           // Fallback to event timestamp if charged_at is not available
           if (timestamp === 0 && event.timestamp) {
             timestamp = Math.floor(new Date(event.timestamp).getTime() / 1000);
@@ -95,9 +104,31 @@ export default function SubscriptionHistory({ userKey }: Props) {
         };
       })
       .sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    // Update stale-while-revalidate cache when we have fresh data.
+    if (transformed.length > 0) {
+      cachedEventsRef.current = transformed;
+    }
+
+    return transformed;
   }, [contractEvents]);
 
-  if (loading) {
+  // During a background refresh, show stale data from the ref.
+  const displayEvents = allEvents.length > 0 ? allEvents : cachedEventsRef.current;
+
+  const totalPages = Math.max(1, Math.ceil(displayEvents.length / PAGE_SIZE));
+
+  // Keep page in bounds when data changes (e.g. after a refresh).
+  const safePage = Math.min(page, totalPages);
+
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageEnd = pageStart + PAGE_SIZE;
+  const pageEvents = displayEvents.slice(pageStart, pageEnd);
+
+  // Loading state: only show full skeleton when we have no data at all.
+  const hasData = displayEvents.length > 0;
+
+  if (!hasData && loading) {
     return (
       <div className="card" aria-busy="true" aria-label="Loading charge history">
         <h3 className="subscription-card__title">Charge History</h3>
@@ -108,7 +139,7 @@ export default function SubscriptionHistory({ userKey }: Props) {
     );
   }
 
-  if (error) {
+  if (!hasData && error) {
     return (
       <div className="card" role="alert" aria-live="assertive">
         <h3 className="subscription-card__title">Charge History</h3>
@@ -124,7 +155,7 @@ export default function SubscriptionHistory({ userKey }: Props) {
     );
   }
 
-  if (events.length === 0) {
+  if (!hasData) {
     return (
       <div className="card">
         <h3 className="subscription-card__title">Charge History</h3>
@@ -137,6 +168,7 @@ export default function SubscriptionHistory({ userKey }: Props) {
 
   return (
     <div className="card">
+      {/* Header row: title + export button */}
       <div
         style={{
           display: "flex",
@@ -148,11 +180,10 @@ export default function SubscriptionHistory({ userKey }: Props) {
         <h3 className="subscription-card__title" style={{ margin: 0 }}>
           Charge History
         </h3>
-        {/* #271 — Export CSV button; disabled when no events */}
         <button
           className="btn-secondary"
-          onClick={() => exportToCsv(events)}
-          disabled={events.length === 0}
+          onClick={() => exportToCsv(displayEvents)}
+          disabled={displayEvents.length === 0}
           aria-label="Export charge history as CSV"
           title="Download charge history as a CSV file"
         >
@@ -160,10 +191,29 @@ export default function SubscriptionHistory({ userKey }: Props) {
         </button>
       </div>
 
+      {/* Stale-while-revalidate: overlay spinner on top of existing list */}
+      {loading && hasData && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            marginBottom: "var(--space-2)",
+            opacity: 0.7,
+          }}
+          aria-live="polite"
+          aria-label="Refreshing charge history"
+        >
+          <Spinner />
+          <span style={{ fontSize: "0.8rem" }}>Refreshing…</span>
+        </div>
+      )}
+
+      {/* Event list — at most PAGE_SIZE items mounted */}
       <div className="charge-history-list" role="list">
-        {events.map((event, index) => (
+        {pageEvents.map((event, index) => (
           <div
-            key={`${event.txHash}-${index}`}
+            key={`${event.txHash}-${pageStart + index}`}
             className="charge-history-item"
             role="listitem"
             style={{
@@ -172,7 +222,7 @@ export default function SubscriptionHistory({ userKey }: Props) {
               gap: "var(--space-2)",
               padding: "var(--space-3) 0",
               borderBottom:
-                index < events.length - 1 ? "1px solid var(--color-border)" : "none",
+                index < pageEvents.length - 1 ? "1px solid var(--color-border)" : "none",
             }}
           >
             <div
@@ -183,10 +233,7 @@ export default function SubscriptionHistory({ userKey }: Props) {
               }}
             >
               <span className="subscription-row__value">{formatDate(event.date)}</span>
-              <span
-                className="subscription-row__value"
-                style={{ fontWeight: 600 }}
-              >
+              <span className="subscription-row__value" style={{ fontWeight: 600 }}>
                 {formatAmount(event.amount)}
               </span>
             </div>
@@ -221,6 +268,38 @@ export default function SubscriptionHistory({ userKey }: Props) {
         <div style={{ textAlign: "center", padding: "var(--space-4) 0" }}>
           <button onClick={loadMore} className="btn-secondary" disabled={loading}>
             Load more
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: "var(--space-4)",
+            gap: "var(--space-2)",
+          }}
+        >
+          <button
+            className="btn-secondary"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage <= 1}
+            aria-label="Previous page"
+          >
+            Previous
+          </button>
+
+          <span data-testid="history-page-info" style={{ fontSize: "0.875rem" }}>
+            Page {safePage} of {totalPages}
+          </span>
+
+          <button
+            className="btn-secondary"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage >= totalPages}
+            aria-label="Next page"
+          >
+            Next
           </button>
         </div>
       )}

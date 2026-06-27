@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { buildCancelTx, buildPayPerUseTx } from "../stellar";
 import { friendlyError } from "../utils/errors";
 import SubscriptionCard from "./SubscriptionCard";
 import SubscriptionCardSkeleton from "./Skeleton";
-import SubscriptionHistory from "./SubscriptionHistory";
+import ErrorBoundary from "./ErrorBoundary";
+
+// Lazy-load SubscriptionHistory so it is excluded from the main chunk (Issue #445).
+const SubscriptionHistory = lazy(() => import("./SubscriptionHistory"));
 import PayPerUseForm from "./PayPerUseForm";
 import ConfirmModal from "./ConfirmModal";
 import DailyLimitCard from "./DailyLimitCard";
@@ -87,7 +90,7 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce, o
     }
   }
 
-  async function handlePayPerUse(stroops: bigint) {
+  const handlePayPerUse = useCallback(async (stroops: bigint) => {
     announce("Transaction submitted");
     try {
       const hash = await ppuTx.submit(async () => {
@@ -102,7 +105,7 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce, o
       addToast(msg, "error");
       announce(msg);
     }
-  }
+  }, [userKey, onSign, announce, addToast, onPayPerUse, ppuTx]);
 
   if (loading)
     return (
@@ -179,7 +182,11 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce, o
 
               </div>
 
-              <SubscriptionHistory userKey={userKey} />
+              <ErrorBoundary>
+                <Suspense fallback={<SubscriptionCardSkeleton />}>
+                  <SubscriptionHistory userKey={userKey} />
+                </Suspense>
+              </ErrorBoundary>
               <PayPerUseForm ref={ppuInputRef} onPay={handlePayPerUse} loading={ppuPending} />
               {ppuPending && (
                 <p className="status-text status-text--pending">Confirming payment…</p>

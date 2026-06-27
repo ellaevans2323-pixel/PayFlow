@@ -24,11 +24,16 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce, on
   const [merchant, setMerchant] = useState("");
   const [amount, setAmount] = useState("");
   const [interval, setInterval] = useState(BILLING_INTERVALS[2].value);
-  const { errors, validate, validateAsync, validating } = useFormValidation();
+  const { errors, validate, validateAsync, validating, isValid } = useFormValidation();
   const { toasts, addToast, removeToast } = useToast();
   const tx = useTransaction();
 
   const debouncedMerchant = useDebounce(merchant, 500);
+
+  // Validate whenever any field changes
+  useEffect(() => {
+    validate({ merchant, amount, interval });
+  }, [merchant, amount, interval, validate]);
 
   useEffect(() => {
     if (debouncedMerchant) {
@@ -50,8 +55,8 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce, on
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const isValid = await validateAsync({ merchant, amount, interval });
-    if (!isValid) return;
+    const isValidAsync = await validateAsync({ merchant, amount, interval });
+    if (!isValidAsync) return;
 
     announce("Transaction submitted");
     const hash = await tx.submit(async () => {
@@ -79,7 +84,7 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce, on
   }, [amount]);
 
   const pending = tx.status === "pending";
-  const disabled = pending || validating;
+  const disabled = pending || validating || !isValid;
 
   return (
     <form onSubmit={handleSubmit} className="subscribe-form">

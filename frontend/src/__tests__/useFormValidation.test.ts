@@ -7,15 +7,16 @@ vi.mock("../stellar", () => ({
   },
 }));
 
-import { useFormValidation, type FormFields } from "../hooks/useFormValidation";
+import { useFormValidation, type FormFields, validateStroopAmount, validateInterval, validateAddress } from "../hooks/useFormValidation";
 import { server } from "../stellar";
+import { CONTRACT_LIMITS } from "../constants";
 
 const mockedServer = vi.mocked(server);
 
 const validFields: FormFields = {
   merchant: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
   amount: "10",
-  interval: 30,
+  interval: 3600,
 };
 
 function validateFields(fields: FormFields) {
@@ -41,7 +42,7 @@ describe("useFormValidation", () => {
     });
 
     expect(isValid).toBe(false);
-    expect(result.current.errors.merchant).toBe("Merchant address is required.");
+    expect(result.current.errors.merchant).toBe("Address is required.");
   });
 
   it("returns a merchant error when merchant address is not a valid Stellar address", () => {
@@ -65,7 +66,10 @@ describe("useFormValidation", () => {
   });
 
   it("returns no errors for valid fields", () => {
-    const { result, isValid } = validateFields(validFields);
+    const { result, isValid } = validateFields({
+      ...validFields,
+      interval: CONTRACT_LIMITS.MIN_INTERVAL_SECONDS,
+    });
 
     expect(isValid).toBe(true);
     expect(result.current.errors).toEqual({});
@@ -81,7 +85,7 @@ describe("useFormValidation", () => {
       let promise: Promise<boolean>;
 
       act(() => {
-        promise = hook.result.current.validateAsync(validFields);
+        promise = hook.result.current.validateAsync({ ...validFields, interval: CONTRACT_LIMITS.MIN_INTERVAL_SECONDS });
       });
 
       expect(hook.result.current.validating).toBe(true);
@@ -105,7 +109,7 @@ describe("useFormValidation", () => {
       let promise: Promise<boolean>;
 
       act(() => {
-        promise = hook.result.current.validateAsync(validFields);
+        promise = hook.result.current.validateAsync({ ...validFields, interval: CONTRACT_LIMITS.MIN_INTERVAL_SECONDS });
       });
 
       expect(hook.result.current.validating).toBe(true);
@@ -159,14 +163,14 @@ describe("useFormValidation", () => {
       let promise2: Promise<boolean>;
 
       act(() => {
-        promise1 = hook.result.current.validateAsync(validFields);
+        promise1 = hook.result.current.validateAsync({ ...validFields, interval: CONTRACT_LIMITS.MIN_INTERVAL_SECONDS });
       });
 
       expect(hook.result.current.validating).toBe(true);
 
       // Trigger second validation immediately
       act(() => {
-        promise2 = hook.result.current.validateAsync(validFields);
+        promise2 = hook.result.current.validateAsync({ ...validFields, interval: CONTRACT_LIMITS.MIN_INTERVAL_SECONDS });
       });
 
       // Resolve the first one (should be ignored)
@@ -184,5 +188,71 @@ describe("useFormValidation", () => {
       expect(res2).toBe(true);
       expect(hook.result.current.validating).toBe(false);
     });
+  });
+});
+
+describe("validateStroopAmount", () => {
+  it("returns invalid for empty string", () => {
+    const result = validateStroopAmount("", CONTRACT_LIMITS.MAX_PAY_PER_USE_AMOUNT);
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns invalid for zero", () => {
+    const result = validateStroopAmount("0", CONTRACT_LIMITS.MAX_PAY_PER_USE_AMOUNT);
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns invalid for negative amount", () => {
+    const result = validateStroopAmount("-10", CONTRACT_LIMITS.MAX_PAY_PER_USE_AMOUNT);
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns invalid for amount over max", () => {
+    const result = validateStroopAmount("100000000001", CONTRACT_LIMITS.MAX_PAY_PER_USE_AMOUNT);
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns valid for amount exactly at max", () => {
+    const result = validateStroopAmount("10000", CONTRACT_LIMITS.MAX_PAY_PER_USE_AMOUNT); // 10000 XLM = 10000 * 10^7 = 1e11 stroops
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe("validateInterval", () => {
+  it("returns invalid for 0", () => {
+    const result = validateInterval(0, CONTRACT_LIMITS.MIN_INTERVAL_SECONDS);
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns invalid for less than min", () => {
+    const result = validateInterval(CONTRACT_LIMITS.MIN_INTERVAL_SECONDS - 1, CONTRACT_LIMITS.MIN_INTERVAL_SECONDS);
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns valid for exactly min", () => {
+    const result = validateInterval(CONTRACT_LIMITS.MIN_INTERVAL_SECONDS, CONTRACT_LIMITS.MIN_INTERVAL_SECONDS);
+    expect(result.valid).toBe(true);
+  });
+
+  it("returns valid for more than min", () => {
+    const result = validateInterval(CONTRACT_LIMITS.MIN_INTERVAL_SECONDS + 1, CONTRACT_LIMITS.MIN_INTERVAL_SECONDS);
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe("validateAddress", () => {
+  it("returns invalid for empty string", () => {
+    const result = validateAddress("");
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns invalid for invalid address", () => {
+    const result = validateAddress("invalid");
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns valid for valid address", () => {
+    const result = validateAddress("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
+    expect(result.valid).toBe(true);
   });
 });
