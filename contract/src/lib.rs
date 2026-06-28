@@ -3,6 +3,7 @@
 mod admin;
 mod batch;
 #[cfg(test)]
+use soroban_sdk::testutils::storage::Instance;
 mod bench;
 mod charge_exec;
 mod errors;
@@ -762,6 +763,8 @@ impl FlowPay {
         min_interval::get_min_interval(&env)
     }
 
+
+
     /// Adds a merchant to the whitelist.
     pub fn add_merchant(env: Env, merchant: Address) {
         admin::require_admin(&env);
@@ -1109,6 +1112,7 @@ impl FlowPay {
     // Contract pause
     // ─────────────────────────────────────────────────────────────
 
+   
     /// Pauses the contract. Only the admin can call this.
     pub fn pause_contract(env: Env) {
         admin::require_admin(&env);
@@ -1143,6 +1147,11 @@ impl FlowPay {
         let contract_paused = storage::is_contract_paused(&env);
         let token_configured = storage::get_token(&env).is_some();
         let admin_configured = storage::get_admin_optional(&env).is_some();
+        #[cfg(test)]
+        let instance_ttl_ledgers: u32 = env.storage().instance().get_ttl();
+        #[cfg(not(test))]
+        let instance_ttl_ledgers: u32 = 0;
+        let instance_ttl_ledgers = env.storage().max_ttl();
 
         #[cfg(any(test, feature = "testutils"))]
         let instance_ttl_ledgers = {
