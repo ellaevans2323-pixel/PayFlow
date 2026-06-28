@@ -1,6 +1,7 @@
 use soroban_sdk::{Address, Env, String};
 use crate::errors::ContractError;
 use crate::DataKey;
+use crate::SUBSCRIPTION_TTL_LEDGERS;
 
 /// Stores a short metadata label for a subscriber (e.g. plan name).
 /// Overwrites any previously stored value. Enforces a 64-byte max length limit.
@@ -9,11 +10,14 @@ pub fn set_metadata(env: &Env, user: &Address, label: String) -> Result<(), Cont
     if label.len() > 64 {
         return Err(ContractError::MetadataLabelTooLong);
     }
-
     env.storage()
         .persistent()
         .set(&DataKey::SubscriptionMeta(user.clone()), &label);
-
+    env.storage().persistent().extend_ttl(
+        &DataKey::SubscriptionMeta(user.clone()),
+        SUBSCRIPTION_TTL_LEDGERS,
+        SUBSCRIPTION_TTL_LEDGERS,
+    );
     Ok(())
 }
 

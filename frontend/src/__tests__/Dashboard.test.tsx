@@ -17,7 +17,7 @@ vi.mock("../stellar", () => ({
 }));
 vi.mock("../hooks/usePolling", () => ({ usePolling: () => { } }));
 vi.mock("../hooks/useRpcHealth", () => ({
-  useRpcHealth: vi.fn(() => ({ healthy: true, error: null })),
+  useRpcHealth: vi.fn(() => ({ status: "healthy", latencyMs: 50, error: null })),
 }));
 vi.mock("../components/SubscriptionHistory", () => ({
   default: () => <div data-testid="history" />,
@@ -64,7 +64,7 @@ describe("Dashboard", () => {
   });
 
   it("shows an inline RPC warning when RPC is unhealthy", async () => {
-    vi.mocked(useRpcHealth).mockReturnValue({ healthy: false, error: "RPC down" });
+    vi.mocked(useRpcHealth).mockReturnValue({ status: "unreachable", latencyMs: null, error: "RPC down" });
     setup();
 
     await waitFor(() =>

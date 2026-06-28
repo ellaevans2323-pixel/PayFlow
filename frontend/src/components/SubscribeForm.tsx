@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import { buildSubscribeTx, DEFAULT_TOKEN } from "../stellar";
 import { friendlyError } from "../utils/errors";
 import { STROOPS_PER_XLM, BILLING_INTERVALS } from "../constants"; // BILLING_INTERVALS used for initial value
 import { useFormValidation } from "../hooks/useFormValidation";
+import { useDebounce } from "../hooks/useDebounce";
 import { useToast } from "../hooks/useToast";
 import { useTransaction } from "../hooks/useTransaction";
 import BalanceDisplay from "./BalanceDisplay";
@@ -23,9 +24,26 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce, on
   const [merchant, setMerchant] = useState("");
   const [amount, setAmount] = useState("");
   const [interval, setInterval] = useState(BILLING_INTERVALS[2].value);
-  const { errors, validate } = useFormValidation();
+  const { errors, validate, validateAsync, validating, isValid } = useFormValidation();
   const { toasts, addToast, removeToast } = useToast();
   const tx = useTransaction();
+
+  const debouncedMerchant = useDebounce(merchant, 500);
+
+  // Validate whenever any field changes
+  useEffect(() => {
+    validate({ merchant, amount, interval });
+  }, [merchant, amount, interval, validate]);
+
+  useEffect(() => {
+    if (debouncedMerchant) {
+      validateAsync({
+        merchant: debouncedMerchant,
+        amount: amount || "1",
+        interval: interval || 30,
+      });
+    }
+  }, [debouncedMerchant, validateAsync]);
 
   function validateReferrer(value: string): string | null {
     if (!value) return null; // Optional field
@@ -37,7 +55,8 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce, on
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validate({ merchant, amount, interval })) return;
+    const isValidAsync = await validateAsync({ merchant, amount, interval });
+    if (!isValidAsync) return;
 
     announce("Transaction submitted");
     const hash = await tx.submit(async () => {
@@ -65,6 +84,7 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce, on
   }, [amount]);
 
   const pending = tx.status === "pending";
+  const disabled = pending || validating || !isValid;
 
   return (
     <form onSubmit={handleSubmit} className="subscribe-form">
@@ -108,11 +128,12 @@ export default function SubscribeForm({ userKey, onSign, onSuccess, announce, on
       <IntervalSelector value={interval} onChange={setInterval} />
       {errors.interval && <span className="text-error">{errors.interval}</span>}
 
-      <button type="submit" disabled={pending} className="btn-primary subscribe-form__submit">
-        {pending ? "Confirming…" : "Subscribe"}
+      <button type="submit" disabled={disabled} className="btn-primary subscribe-form__submit">
+        {pending ? "Confirming…" : validating ? "Validating…" : "Subscribe"}
       </button>
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </form>
   );
 }
+

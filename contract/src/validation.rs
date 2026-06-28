@@ -54,20 +54,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_require_positive_amount_positive() {
-        require_positive_amount(1);
-        require_positive_amount(100);
-    }
-
-    #[test]
     fn test_require_positive_amount_accepts_positive() {
         require_positive_amount(1);
-    }
-
-    #[test]
-    #[should_panic(expected = "amount must be positive")]
-    fn test_require_positive_amount_negative() {
-        require_positive_amount(0);
+        require_positive_amount(100);
     }
 
     #[test]
@@ -83,19 +72,9 @@ mod tests {
     }
 
     #[test]
-    fn test_require_positive_interval_positive() {
-        require_positive_interval(1);
-    }
-
-    #[test]
     fn test_require_positive_interval_accepts_positive() {
+        require_positive_interval(1);
         require_positive_interval(60);
-    }
-
-    #[test]
-    #[should_panic(expected = "interval must be positive")]
-    fn test_require_positive_interval_negative() {
-        require_positive_interval(0);
     }
 
     #[test]
@@ -105,19 +84,8 @@ mod tests {
     }
 
     #[test]
-    fn test_require_active_subscription_positive() {
-        require_active_subscription(true);
-    }
-
-    #[test]
     fn test_require_active_subscription_accepts_true() {
         require_active_subscription(true);
-    }
-
-    #[test]
-    #[should_panic(expected = "subscription is not active")]
-    fn test_require_active_subscription_negative() {
-        require_active_subscription(false);
     }
 
     #[test]
@@ -127,20 +95,9 @@ mod tests {
     }
 
     #[test]
-    fn test_require_charge_interval_elapsed_positive() {
-        require_charge_interval_elapsed(100, 40, 60);
-        require_charge_interval_elapsed(150, 40, 60);
-    }
-
-    #[test]
     fn test_require_charge_interval_elapsed_accepts_elapsed_interval() {
         require_charge_interval_elapsed(100, 40, 60);
-    }
-
-    #[test]
-    #[should_panic(expected = "interval not elapsed yet")]
-    fn test_require_charge_interval_elapsed_negative() {
-        require_charge_interval_elapsed(99, 40, 60);
+        require_charge_interval_elapsed(150, 40, 60);
     }
 
     #[test]

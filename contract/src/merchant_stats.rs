@@ -62,6 +62,8 @@ pub fn increment_revenue_with_daily(env: &Env, merchant: &Address, amount: i128)
     env.storage()
         .persistent()
         .set(&day_key, &(current_day + amount));
+    // extend TTL: 1,555,200 ledgers (~90 days)
+    env.storage().persistent().extend_ttl(&day_key, 1555200, 1555200);
 
     // append to consolidated history Vec
     let hist_key = DataKey::MerchantRevenueHistory(merchant.clone());
@@ -105,4 +107,27 @@ pub fn reset_merchant_revenue(env: &Env, merchant: &Address) {
     env.storage()
         .persistent()
         .set(&DataKey::MerchantRevenue(merchant.clone()), &0i128);
+}
+
+/// Extends the TTL of a specific merchant daily revenue bucket.
+pub fn bump_merchant_revenue_day(env: &Env, merchant: &Address, day: u64) {
+    let key = DataKey::MerchantRevenueDay(merchant.clone(), day);
+    if env.storage().persistent().has(&key) {
+        env.storage().persistent().extend_ttl(&key, 1555200, 1555200);
+    }
+}
+
+/// Prunes missing or expired daily revenue buckets safely.
+pub fn prune_merchant_revenue_days(env: &Env, merchant: &Address, days: Vec<u64>) {
+    crate::admin::require_admin(env);
+    for day in days.into_iter() {
+        let key = DataKey::MerchantRevenueDay(merchant.clone(), day);
+        env.storage().persistent().remove(&key);
+    }
+}
+
+/// Retrieves a specific daily revenue bucket.
+pub fn get_merchant_revenue_day(env: &Env, merchant: &Address, day: u64) -> i128 {
+    let key = DataKey::MerchantRevenueDay(merchant.clone(), day);
+    env.storage().persistent().get(&key).unwrap_or(0i128)
 }

@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { buildCancelTx, buildPayPerUseTx } from "../stellar";
 import { friendlyError } from "../utils/errors";
 import SubscriptionCard from "./SubscriptionCard";
 import SubscriptionCardSkeleton from "./Skeleton";
-import SubscriptionHistory from "./SubscriptionHistory";
+import ErrorBoundary from "./ErrorBoundary";
+
+// Lazy-load SubscriptionHistory so it is excluded from the main chunk (Issue #445).
+const SubscriptionHistory = lazy(() => import("./SubscriptionHistory"));
 import PayPerUseForm from "./PayPerUseForm";
 import ConfirmModal from "./ConfirmModal";
 import DailyLimitCard from "./DailyLimitCard";
@@ -29,7 +32,7 @@ interface Props {
 export default function Dashboard({ userKey, onSign, refreshTrigger, announce, onCancelled, onPayPerUse }: Props) {
   const { subscription: sub, loading, refresh } = useSubscription(userKey, refreshTrigger);
   const { toasts, addToast, removeToast } = useToast();
-  const { healthy: rpcHealthy, error: rpcError } = useRpcHealth();
+  const { status: rpcStatus, latencyMs: rpcLatency, error: rpcError } = useRpcHealth();
   const cancelTx = useTransaction();
   const ppuTx = useTransaction();
   const [showConfirm, setShowConfirm] = useState(false);
@@ -87,7 +90,7 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce, o
     }
   }
 
-  async function handlePayPerUse(stroops: bigint) {
+  const handlePayPerUse = useCallback(async (stroops: bigint) => {
     announce("Transaction submitted");
     try {
       const hash = await ppuTx.submit(async () => {
@@ -102,12 +105,18 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce, o
       addToast(msg, "error");
       announce(msg);
     }
-  }
+  }, [userKey, onSign, announce, addToast, onPayPerUse, ppuTx]);
 
   if (loading)
     return (
       <>
-        {!rpcHealthy && rpcError && (
+        {rpcStatus === "degraded" && (
+          <div className="network-warning network-warning--degraded" role="alert">
+            <span>⚠️</span>
+            <span>RPC connection degraded: Latency is high ({rpcLatency}ms)</span>
+          </div>
+        )}
+        {rpcStatus === "unreachable" && rpcError && (
           <div className="network-warning" role="alert">
             <span>⚠️</span>
             <span>RPC endpoint unreachable: {rpcError}</span>
@@ -122,7 +131,13 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce, o
 
   return (
     <div className="dashboard">
-      {!rpcHealthy && rpcError && (
+      {rpcStatus === "degraded" && (
+        <div className="network-warning network-warning--degraded" role="alert">
+          <span>⚠️</span>
+          <span>RPC connection degraded: Latency is high ({rpcLatency}ms)</span>
+        </div>
+      )}
+      {rpcStatus === "unreachable" && rpcError && (
         <div className="network-warning" role="alert">
           <span>⚠️</span>
           <span>RPC endpoint unreachable: {rpcError}</span>
@@ -167,7 +182,11 @@ export default function Dashboard({ userKey, onSign, refreshTrigger, announce, o
 
               </div>
 
-              <SubscriptionHistory userKey={userKey} />
+              <ErrorBoundary>
+                <Suspense fallback={<SubscriptionCardSkeleton />}>
+                  <SubscriptionHistory userKey={userKey} />
+                </Suspense>
+              </ErrorBoundary>
               <PayPerUseForm ref={ppuInputRef} onPay={handlePayPerUse} loading={ppuPending} />
               {ppuPending && (
                 <p className="status-text status-text--pending">Confirming payment…</p>

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { server } from "../stellar";
+import { enqueueTransaction } from "../services/txQueue";
 
 export type TxStatus = "idle" | "pending" | "success" | "failed";
 
@@ -26,7 +27,7 @@ export function useTransaction(): UseTransactionResult {
 
     let txHash: string;
     try {
-      txHash = await buildAndSign();
+      txHash = await enqueueTransaction(buildAndSign, "Transaction");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);

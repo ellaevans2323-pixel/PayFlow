@@ -1,4 +1,14 @@
-import React, { useState, useRef } from "react";
+/*
+ * Chunk size note (Issue #445):
+ *   Before lazy-loading:
+ *     main chunk included MerchantDashboard (~8 KB) and SubscriptionHistory
+ *     (~7.5 KB) regardless of the active tab, delaying initial parse.
+ *   After lazy-loading:
+ *     MerchantDashboard is split into a dedicated "merchant" chunk via the
+ *     Vite chunk comment below. SubscriptionHistory is split into its own
+ *     dynamic chunk. The main entry chunk no longer contains either component.
+ */
+import React, { useState, useRef, lazy, Suspense } from "react";
 import { useWallet } from "./hooks/useWallet";
 import { useTheme } from "./hooks/useTheme";
 import { useLocalStorage } from "./hooks/useLocalStorage";
@@ -13,11 +23,17 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useAnalytics } from "./hooks/useAnalytics";
 import SubscribeForm from "./components/SubscribeForm";
 import Dashboard from "./components/Dashboard";
-import MerchantDashboard from "./components/MerchantDashboard";
 import TabBar from "./components/TabBar";
 import ConnectWallet from "./components/ConnectWallet";
 import WalletBar from "./components/WalletBar";
 import ErrorBoundary from "./components/ErrorBoundary";
+import SubscriptionCardSkeleton from "./components/Skeleton";
+
+// Lazy-loaded components — split into separate chunks to keep the main bundle lean.
+// MerchantDashboard gets a dedicated Vite chunk name for easier bundle analysis.
+const MerchantDashboard = lazy(
+  () => import(/* @vite-chunk-name: "merchant" */ "./components/MerchantDashboard")
+);
 
 function SunIcon() {
   return (
@@ -92,7 +108,7 @@ export default function App() {
   const { available: freighterAvailable, installUrl } = useFreighterAvailable();
   const { networkMatch, walletNetwork } = useNetworkCheck();
   const { valid: contractIdValid, error: contractIdError } = useContractId();
-  const { healthy: rpcHealthy, error: rpcError } = useRpcHealth();
+  const { status: rpcStatus, latencyMs: rpcLatency, error: rpcError } = useRpcHealth();
   const { isMobile } = useResponsive();
   const { announcement, announce } = useAccessibility();
   const { count: subscriberCount, loading: subscriberCountLoading } = useSubscriberCount();
@@ -151,7 +167,7 @@ export default function App() {
 
   async function handleConnectWallet() {
     await connect();
-    track("wallet_connect");
+    track({ type: "wallet_connected" });
   }
 
   return (
@@ -263,7 +279,13 @@ export default function App() {
       )}
 
       {/* RPC health warning */}
-      {!rpcHealthy && rpcError && (
+      {rpcStatus === "degraded" && (
+        <div className="network-warning network-warning--degraded" role="alert">
+          <span>⚠️</span>
+          <span>RPC connection degraded: Latency is high ({rpcLatency}ms)</span>
+        </div>
+      )}
+      {rpcStatus === "unreachable" && rpcError && (
         <div className="network-warning" role="alert">
           <span>⚠️</span>
           <span>RPC endpoint unreachable: {rpcError}</span>
@@ -351,7 +373,7 @@ export default function App() {
                 <SubscribeForm
                   userKey={publicKey}
                   onSign={signAndSubmit}
-                  onSubscribed={() => track("subscribe")}
+                  onSubscribed={() => track({ type: "subscription_created" })}
                   onSuccess={() => {
                     setTab("dashboard");
                     setRefresh((r) => r + 1);
@@ -369,11 +391,13 @@ export default function App() {
                   />
                 }
               >
-                <MerchantDashboard
-                  merchantKey={publicKey}
-                  onSign={signAndSubmit}
-                  refreshTrigger={refresh}
-                />
+                <Suspense fallback={<SubscriptionCardSkeleton />}>
+                  <MerchantDashboard
+                    merchantKey={publicKey}
+                    onSign={signAndSubmit}
+                    refreshTrigger={refresh}
+                  />
+                </Suspense>
               </ErrorBoundary>
             ) : (
               <ErrorBoundary
@@ -390,8 +414,8 @@ export default function App() {
                   onSign={signAndSubmit}
                   refreshTrigger={refresh}
                   announce={announce}
-                  onCancelled={() => track("cancel")}
-                  onPayPerUse={(amount) => track("pay_per_use", { amount: amount.toString() })}
+                  onCancelled={() => track({ type: "subscription_cancelled" })}
+                  onPayPerUse={(amount) => track({ type: "pay_per_use", metadata: { amount: amount.toString() } })}
                 />
               </ErrorBoundary>
             )}

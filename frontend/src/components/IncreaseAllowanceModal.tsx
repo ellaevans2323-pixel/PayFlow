@@ -97,7 +97,12 @@ export default function IncreaseAllowanceModal({
         <h3>Increase Allowance</h3>
         <p>
           Current allowance: <strong>{formatXlm(currentAllowance ?? 0n)}</strong>.
+        </p>
+        <p>
           Recommended approval: <strong>{formatXlm(recommendedAllowance)}</strong>.
+        </p>
+        <p>
+          Estimated billing cycles with new allowance: <strong>{Math.floor(parseFloat(amount || "0") * Number(STROOPS_PER_XLM) / Number(subscriptionAmount))}</strong>.
         </p>
         <label className="form-group">
           <span className="form-label">Approve total allowance (XLM)</span>
@@ -127,9 +132,10 @@ export default function IncreaseAllowanceModal({
 }
 
 function getRecommendedAllowance(subscriptionAmount: bigint, currentAllowance: bigint | null): bigint {
-  const minimum = subscriptionAmount * 2n;
-  if (currentAllowance === null || currentAllowance <= subscriptionAmount) {
-    return minimum;
+  const remainingCyclesTarget = 6n;
+  const target = subscriptionAmount * remainingCyclesTarget;
+  if (currentAllowance === null || currentAllowance < subscriptionAmount) {
+    return target;
   }
-  return currentAllowance + subscriptionAmount;
+  return target > currentAllowance ? target : currentAllowance + subscriptionAmount;
 }
