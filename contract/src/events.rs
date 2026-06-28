@@ -162,6 +162,9 @@ pub fn publish_subscription_transferred(env: &Env, old_user: &Address, new_user:
     env.events().publish(
         (Symbol::new(env, "sub_transferred"), old_user.clone()),
         new_user.clone(),
+    );
+}
+
 pub fn publish_subscription_amount_updated(
     env: &Env,
     user: &Address,
@@ -191,4 +194,9 @@ pub fn publish_merchant_withdrawal(env: &Env, merchant: &Address, amount: i128) 
         (Symbol::new(env, "merchant_withdrawal"), merchant.clone()),
         amount,
     );
+}
+
+pub fn publish_subscription_auto_resumed(env: &Env, user: &Address) {
+    env.events()
+        .publish((Symbol::new(env, "subscription_auto_resumed"), user.clone()), ());
 }
