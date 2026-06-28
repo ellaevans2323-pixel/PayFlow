@@ -408,7 +408,7 @@
             },
             "ext": "v0"
           },
-          4095
+          1555200
         ]
       ],
       [
@@ -661,7 +661,7 @@
                         "symbol": "label"
                       },
                       "val": {
-                        "symbol": "default"
+                        "symbol": ""
                       }
                     },
                     {
@@ -2236,7 +2236,7 @@
                     "symbol": "label"
                   },
                   "val": {
-                    "symbol": "default"
+                    "symbol": ""
                   }
                 },
                 {

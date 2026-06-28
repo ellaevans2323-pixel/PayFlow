@@ -898,7 +898,7 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000003"
               },
               {
-                "symbol": "set_grace_period"
+                "symbol": "propose_grace_period"
               }
             ],
             "data": {
@@ -1014,7 +1014,7 @@
                   "string": "contract call failed"
                 },
                 {
-                  "symbol": "set_grace_period"
+                  "symbol": "propose_grace_period"
                 },
                 {
                   "vec": [

@@ -446,7 +446,7 @@
                         "symbol": "label"
                       },
                       "val": {
-                        "symbol": "default"
+                        "symbol": ""
                       }
                     },
                     {
@@ -1576,7 +1576,7 @@
                     "symbol": "label"
                   },
                   "val": {
-                    "symbol": "default"
+                    "symbol": ""
                   }
                 },
                 {
@@ -1800,7 +1800,7 @@
                     "symbol": "label"
                   },
                   "val": {
-                    "symbol": "default"
+                    "symbol": ""
                   }
                 },
                 {
