@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { buildCancelTx, buildPayPerUseTx } from "../stellar";
 import { friendlyError } from "../utils/errors";
 import SubscriptionCard from "./SubscriptionCard";
