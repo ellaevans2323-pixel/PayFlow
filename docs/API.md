@@ -2,6 +2,15 @@
 
 This document is the complete reference for the FlowPay Soroban smart contract. It covers every public function, its parameters, return values, auth requirements, and error conditions.
 
+*See also: [Daily Spending Limits Guide](./DAILY-LIMITS.md) for a conceptual overview of the `pay_per_use` spending cap.*
+For a complete list of all error codes returned by the contract, see [ERROR-CODES.md](./ERROR-CODES.md).
+
+For a complete reference of all events emitted by the contract, see [EVENTS.md](./EVENTS.md).
+
+For a guide on using custom SAC tokens for subscriptions, see [MULTI-TOKEN.md](./MULTI-TOKEN.md).
+
+For a guide on the referral tracking system, see [REFERRAL.md](./REFERRAL.md).
+
 ---
 
 ## Data Types
@@ -559,6 +568,8 @@ soroban contract invoke \
 
 Sets a daily spending cap for `pay_per_use()` for the calling user. The limit is stored in temporary storage and resets automatically after approximately one day (~17,280 ledgers at 5 s/ledger).
 
+*For a detailed conceptual guide on how limits and TTL expirations work, see [Daily Spending Limits](./DAILY-LIMITS.md).*
+
 ```
 set_daily_limit(env: Env, user: Address, limit: i128)
 ```
@@ -1108,6 +1119,8 @@ All intervals are in **seconds**.
 ## Events Reference
 
 All events can be indexed by listening to the Stellar RPC event stream for the FlowPay contract ID.
+
+For a complete reference of all events with detailed schemas and examples, see [EVENTS.md](./EVENTS.md).
 
 | Event name | Topic | Data |
 | --- | --- | --- |
